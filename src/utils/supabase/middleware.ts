@@ -1,6 +1,8 @@
 import { type CookieOptions, createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
-import { SUPABASE_KEY, SUPABASE_URL } from "./constants";
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ! as string;
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ! as string;
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({

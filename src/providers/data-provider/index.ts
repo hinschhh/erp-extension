@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { dataProvider as dataProviderSupabase } from "@refinedev/supabase";
 import { supabaseBrowserClient } from "@utils/supabase/client";
