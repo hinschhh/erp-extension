@@ -33,6 +33,14 @@ const resources: IResourceItem[] = [
     label: "Lieferanten",
   }
 },
+{
+    "name": "Inventur",
+    "list": "/einkauf/inventur",
+    "parentName": "einkauf",
+    options: {
+      label: "Inventur",
+    }
+},
 ]
 
 
