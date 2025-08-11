@@ -10,7 +10,7 @@ const CustomTitle = ({ collapsed }: { collapsed: boolean }) => (
   <Link href="/"><span>{collapsed ? <img src="/LL_500x500.png" alt="L&amp;L" width="60px" /> : <img src="/L&amp;L_Logo_1200_x_200.jpg" alt="Land &amp; Liebe" width="160px" />}</span></Link>
 );
 
-export const ShowOrder = () => {
+export default function Page() {
   return (
     <Authenticated v3LegacyAuthProviderCompatible={true} key="authenticated">
       <ThemedLayoutV2
@@ -47,5 +47,3 @@ export const ShowOrder = () => {
     </Authenticated>
   );
 }
-
-export default ShowOrder;

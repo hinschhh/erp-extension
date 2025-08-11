@@ -39,6 +39,11 @@
     ".next/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    ".next",
+    "supabase/functions",
+    "supabase/migrations",
+    "supabase/seed",
+    "supabase/cli"
   ]
 }
