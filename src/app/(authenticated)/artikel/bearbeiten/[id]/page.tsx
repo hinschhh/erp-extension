@@ -4,6 +4,7 @@
 import React from "react";
 import useSWR from "swr";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -353,7 +354,7 @@ const buttonClick = (target: "list" | "billbee") => {
             {imageUrl ? (
               <div style={{ position: "relative", width: imgBoxSize ?? 320, height: imgBoxSize ?? 320, maxWidth: "100%" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={imageUrl}
                   alt={pStrict?.name ?? "Produktbild"}
                   style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }}

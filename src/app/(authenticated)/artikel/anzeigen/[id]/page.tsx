@@ -4,6 +4,7 @@
 import React from "react";
 import useSWR from "swr";
 import Link from "next/link";
+import Image from "next/image";
 import { Card, Descriptions, Typography, Divider, Table, Tag, Row, Col, Space, Button } from "antd";
 import { useShow, useList } from "@refinedev/core";
 import type { Tables } from "@/types/supabase";
@@ -47,10 +48,12 @@ const UsedInImageCell: React.FC<{ id: number; alt?: string; size?: number }> = (
   if (!data?.imageUrl) return <>—</>;
   // eslint-disable-next-line @next/next/no-img-element
   return (
-    <img
+    <Image
       src={data.imageUrl}
       alt={alt ?? "Bild"}
-      style={{ width: size, height: size, objectFit: "cover", borderRadius: 6 }}
+      width={size}
+      height={size}
+      style={{ objectFit: "cover", borderRadius: 6 }}
     />
   );
 };
