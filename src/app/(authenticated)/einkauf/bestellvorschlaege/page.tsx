@@ -1,126 +1,55 @@
 "use client";
 
-import React from 'react';
-import { Table, Input, Layout, Spin } from "antd";
-import { SyncAllButton } from '@components/sync-stock-button';
-import { PageHeader } from "@refinedev/antd";
-import { useTable, FilterDropdown } from '@refinedev/antd';
-import { Component } from '@utils/interfaces';
-import { createClient } from '@refinedev/supabase';
+import { Table, Tooltip, Typography } from "antd";
+import { useTable } from "@refinedev/antd";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+type Row = {
+  billbee_product_id: number;
+  sku: string | null;
+  inventory_category: string | null;
+  supplier: string | null;
+  stock_free: number | string;
+  stock_reserved_direct: number | string;
+  stock_reserved_bom: number | string;
+  stock_unavailable: number | string;
+  stock_physical: number | string;
+  stock_on_order: number | string; // Platzhalter 0 aus View
+  updated_at: string;
+};
 
-export default function PurchaseSuggestionsDashboard() {
-  const { tableProps } = useTable<Component>({
-    resource: "components_enriched",
+export default function BestellvorschlaegePage() {
+  const { tableProps } = useTable<Row>({
+    resource: "rpt_products_inventory_purchasing",
+    pagination: { pageSize: 50 },
+    syncWithLocation: true,
+    meta: { select: "*" },
   });
 
-  const loading = tableProps.loading;
-
   return (
-    <Layout>
-      <PageHeader title="Bestellvorschläge" />
-      <div style={{ padding: 24 }}>
-        {loading ? <Spin /> : <></>}
-      </div>
+    <>
+      <Typography.Title level={3}>Bestellvorschläge</Typography.Title>
 
-      <SyncAllButton />
-
-      <Table 
-        {...tableProps}
-        rowKey="id"
-      >
-        <Table.Column 
-          title="SKU" 
-          dataIndex="sku" 
-          key="sku" 
-          filterDropdown={(props) => (
-            <FilterDropdown {...props}>
-              <Input
-                placeholder="Filter SKU"
-                value={props.selectedKeys[0]}
-                onChange={e => props.setSelectedKeys(e.target.value ? [e.target.value] : [])}
-                onPressEnter={() => props.confirm()}
-                style={{ width: 188, marginBottom: 8, display: 'block' }}
-              />
-            </FilterDropdown>
+      <Table<Row> rowKey="billbee_product_id" {...tableProps}>
+        <Table.Column<Row> title="SKU" dataIndex="sku" />
+        <Table.Column<Row> title="Inventur-Kategorie" dataIndex="inventory_category" />
+        <Table.Column<Row> title="Lieferant" dataIndex="supplier" />
+        <Table.Column<Row> title="Freier Lagerbestand" dataIndex="stock_free" />
+        <Table.Column<Row> title="Reservierter Bestand" dataIndex="stock_reserved_direct" />
+        <Table.Column<Row> title="Reserviert in Stücklisten" dataIndex="stock_reserved_bom" />
+        <Table.Column<Row> title="Nicht verfügbar" dataIndex="stock_unavailable" />
+        <Table.Column<Row> title="Physischer Bestand" dataIndex="stock_physical" />
+        <Table.Column<Row> title="Nachbestellter Bestand" dataIndex="stock_on_order"/>
+        <Table.Column<Row>
+          title="Verbrauch"
+          key="consumption_3m"
+          render={() => (
+            <Tooltip title="Rollierende 3-Monatssumme">
+              <span>—</span>
+            </Tooltip>
           )}
-          sorter={{multiple: 1}}
         />
-        <Table.Column 
-          title="Typ" 
-          dataIndex="category" 
-          key="category" 
-          filterDropdown={(props) => (
-            <FilterDropdown {...props}>
-              <Input
-                placeholder="Filter Typ"
-                value={props.selectedKeys[0]}
-                onChange={e => props.setSelectedKeys(e.target.value ? [e.target.value] : [])}
-                onPressEnter={() => props.confirm()}
-                style={{ width: 188, marginBottom: 8, display: 'block' }}
-              />
-            </FilterDropdown>
-          )}
-          sorter={{multiple: 1}}
-          />
-          <Table.Column 
-          title="Lieferant" 
-          dataIndex="manufacturer" 
-          key="manufacturer"
-          filterDropdown={(props) => (
-            <FilterDropdown {...props}>
-              <Input
-                placeholder="Filter Lieferanten"
-                value={props.selectedKeys[0]}
-                onChange={e => props.setSelectedKeys(e.target.value ? [e.target.value] : [])}
-                onPressEnter={() => props.confirm()}
-                style={{ width: 188, marginBottom: 8, display: 'block' }}
-              />
-            </FilterDropdown>
-          )}
-          sorter={{multiple: 1}}
-          />
-        <Table.Column
-  title="Verfügbarer Bestand"
-  dataIndex="stock_available"
-  key="stock_available"
-  sorter={{ multiple: 1 }}
-/>
-
-<Table.Column
-  title="Reservierter Bestand"
-  dataIndex="reserved_stock"   // <- kommt aus der View
-  key="reserved_stock"
-  sorter={{ multiple: 2 }}
-/>
-
-<Table.Column
-  title="Aktueller Lagerbestand"
-  dataIndex="total_stock"      // <- kommt aus der View
-  key="total_stock"
-  sorter={{ multiple: 2 }}
-/>
-
-<Table.Column
-  title="Verbrauch (3-Monats-Summe)"
-  dataIndex="sold_3m_sum"      // <- kommt aus der View
-  key="sold_3m_sum"
-  sorter={{ multiple: 2 }}
-/>
-
-<Table.Column
-  title="Aktualisiert am"
-  dataIndex="updated_at"
-  key="updated_at"
-  sorter={{ multiple: 2 }}
-  render={(_, record) => new Date(record.updated_at).toLocaleDateString("de-DE")}
-/>
-
+        <Table.Column<Row> title="aktualisiert am" dataIndex="updated_at" />
       </Table>
-    </Layout>
+    </>
   );
 }

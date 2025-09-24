@@ -1,7 +1,5 @@
-import { error } from "console";
-
-// src/translations/de.ts
-export default {
+// src/utils/translations/de.ts
+const translationsDe = {
   buttons: {
     create: "Erstellen",
     save: "Speichern",
@@ -11,15 +9,30 @@ export default {
     show: "Anzeigen",
     clone: "Klonen",
     logout: "Abmelden",
+    login: "Anmelden",
+    register: "Registrieren",
+    resetPassword: "Passwort zurücksetzen",
+  },
+  notifications: {
+    created: "Eintrag erfolgreich erstellt",
+    updated: "Änderungen gespeichert",
+    deleted: "Eintrag gelöscht",
+    error: "Es ist ein Fehler aufgetreten",
+  },
+  errors: {
+    required: "Pflichtfeld darf nicht leer sein",
+    invalidEmail: "Bitte eine gültige E-Mail-Adresse eingeben",
+    passwordTooShort: "Das Passwort muss mindestens 8 Zeichen lang sein",
+    unknown: "Ein unbekannter Fehler ist aufgetreten",
   },
   pages: {
     login: {
       title: "Willkommen bei Land & Liebe",
-      fields:{
+      fields: {
         email: "E-Mail",
         password: "Passwort",
       },
-      buttons:{
+      buttons: {
         rememberMe: "Angemeldet bleiben",
         noAccount: "Kein Konto?",
         forgotPassword: "Passwort vergessen?",
@@ -33,12 +46,11 @@ export default {
     },
     register: {
       title: "Wir freuen uns, dass du dich registrieren möchtest!",
-      email: "E-Mail",
       fields: {
+        email: "Deine E-Mail-Adresse",
         password: "Passwort",
-        email: "Deine E-Mail-Adresse"
       },
-      buttons:{
+      buttons: {
         submit: "Registrieren",
         rememberMe: "Angemeldet bleiben",
         haveAccount: "Hast du ein Konto?",
@@ -55,20 +67,25 @@ export default {
       title: "Nächstes Mal besser aufpassen! Hier gibt es Hilfe.",
       fields: {
         email: "E-Mail",
-        password: "Passwort",
       },
-      buttons:{
+      buttons: {
         submit: "Passwort zurücksetzen",
-        rememberMe: "Angemeldet bleiben",
         haveAccount: "Hast du ein Konto?",
-        forgotPassword: "Passwort vergessen?",
+        backToLogin: "Zurück zum Login",
       },
-      errors:{
-        requiredEmail: "Wo sollen wir ohne Mail-Adresse die Hilfe hinschicken? Bitte eintragen.",
+      errors: {
+        requiredEmail:
+          "Wo sollen wir ohne Mail-Adresse die Hilfe hinschicken? Bitte eintragen.",
       },
       signin: "Anmelden",
-    }
+    },
   },
-  // Füge hier alle weiteren Keys hinzu, die Refine nutzt:
-  // pages: { ... }, notifications: { ... }, etc.
+  labels: {
+    email: "E-Mail",
+    password: "Passwort",
+    rememberMe: "Angemeldet bleiben",
+    account: "Konto",
+  },
 };
+
+export default translationsDe;
