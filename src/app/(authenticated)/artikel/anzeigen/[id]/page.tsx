@@ -48,7 +48,7 @@ const UsedInImageCell: React.FC<{ id: number; alt?: string; size?: number }> = (
   if (!data?.imageUrl) return <>—</>;
   // eslint-disable-next-line @next/next/no-img-element
   return (
-    <Image
+    <img
       src={data.imageUrl}
       alt={alt ?? "Bild"}
       width={size}
@@ -226,7 +226,6 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
                   maxWidth: "100%",
                 }}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={imageUrl}
                   alt={pStrict?.name ?? "Produktbild"}

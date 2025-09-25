@@ -27,6 +27,7 @@ import {
   Tooltip,
   Typography,
   Drawer,
+  Switch,
 } from "antd";
 import {
   FileTextOutlined,
@@ -38,7 +39,7 @@ import {
   EditOutlined,
   ThunderboltOutlined,
   CloseOutlined,
-  DeleteOutlined
+  DeleteOutlined,
 } from "@ant-design/icons";
 import dayjs, { Dayjs } from "dayjs";
 
@@ -62,16 +63,16 @@ type ProductFull = {
   net_purchase_price: number | null;
 };
 
-// -------- Order-Status (Enum der DB!) --------
+// -------- Order-Status (UI – DB ist maßgeblich für Drilldown/Rollup) --------
 const STATUS_OPTIONS = [
   { value: "draft", label: "Entwurf" },
   { value: "ordered", label: "Bestellt" },
-  { value: "in_production", label: "In Produktion" },
-  { value: "shipped", label: "Versandt" },
-  { value: "partially_received", label: "Teilweise erhalten" },
-  { value: "received", label: "Erhalten" },
-  { value: "closed", label: "Geschlossen" },
-  { value: "canceled", label: "Storniert" },
+  { value: "confirmed", label: "Bestätigt" },
+  { value: "partially_in_production", label: "Teilw. in Produktion", disabled: true },
+  { value: "in_production", label: "In Produktion", disabled: true },
+  { value: "partially_delivered", label: "Teilw. geliefert", disabled: true },
+  { value: "delivered", label: "Geliefert", disabled: true },
+  { value: "cancelled", label: "Storniert" }, // manuell erlaubt
 ] as const;
 
 const toDate = (d?: string | null) => (d ? dayjs(d) : undefined);
@@ -84,32 +85,28 @@ const cellEllipsis = (content?: React.ReactNode, tooltip?: React.ReactNode) => (
   </Paragraph>
 );
 
-// ----------- Item-Status (Positionsstatus) + Meta -----------
+// -------- Positions-Status --------
 type ItemStatus =
-  | "open"
-  | "proforma_confirmed"
-  | "sketch_confirmed"
+  | "draft"
+  | "ordered"
+  | "confirmed"
   | "in_production"
-  | "shipped"
-  | "received"
-  | "canceled"
-  | "confirmed"; // DB-Rollup-Stufe, wenn nur "bestätigt" ohne Unterscheidung
+  | "delivered"
+  | "paused"
+  | "cancelled";
 
-const ITEM_STATUS_META: Record<
-  ItemStatus,
-  { color: string; icon: React.ReactNode; label: string }
-> = {
-  open: { color: "default", icon: <ClockCircleOutlined />, label: "Offen" },
-  proforma_confirmed: { color: "geekblue", icon: <ScheduleOutlined />, label: "Proforma" },
-  sketch_confirmed: { color: "purple", icon: <EditOutlined />, label: "Skizze" },
-  in_production: { color: "processing", icon: <CalendarOutlined />, label: "Produktion" },
-  shipped: { color: "gold", icon: <ThunderboltOutlined />, label: "Versandt" },
-  received: { color: "success", icon: <CheckCircleOutlined />, label: "WE" },
-  canceled: { color: "red", icon: <CloseOutlined />, label: "Storniert" },
-  confirmed: { color: "geekblue", icon: <ScheduleOutlined />, label: "Bestätigt" },
-};
+const ITEM_STATUS_META: Record<ItemStatus, { color: string; icon: React.ReactNode; label: string }> =
+  {
+    draft: { color: "default", icon: <FileTextOutlined />, label: "Entwurf" },
+    ordered: { color: "blue", icon: <ThunderboltOutlined />, label: "Bestellt" },
+    confirmed: { color: "geekblue", icon: <ScheduleOutlined />, label: "Bestätigt" },
+    in_production: { color: "processing", icon: <CalendarOutlined />, label: "In Produktion" },
+    delivered: { color: "success", icon: <CheckCircleOutlined />, label: "Wareneingang" },
+    paused: { color: "default", icon: <ClockCircleOutlined />, label: "Pausiert" },
+    cancelled: { color: "red", icon: <CloseOutlined />, label: "Storniert" },
+  };
 
-// Fallback-Ableitung rein aus Datumsfeldern (zeigt die feineren Stufen in der UI)
+// Fallback-Ableitung aus Datumsfeldern (nur Anzeige/Optimistic)
 const deriveItemStatusFromDates = (r: {
   proforma_confirmed_at?: string | null;
   sketch_confirmed_at?: string | null;
@@ -117,22 +114,72 @@ const deriveItemStatusFromDates = (r: {
   dol_actual_at?: string | null;
   goods_received_at?: string | null;
 }): ItemStatus => {
-  if (r.goods_received_at) return "received";
-  if (r.dol_actual_at) return "shipped";
+  if (r.goods_received_at) return "delivered";
+  if (r.dol_actual_at) return "in_production";
   if (r.dol_planned_at) return "in_production";
-  if (r.sketch_confirmed_at) return "sketch_confirmed";
-  if (r.proforma_confirmed_at) return "proforma_confirmed";
-  return "open";
+  if (r.sketch_confirmed_at) return "in_production";
+  if (r.proforma_confirmed_at) return "confirmed";
+  return "confirmed";
 };
 
-// Effektiver Status in der UI: "canceled" (DB) dominiert, sonst feinere FE-Stufe,
-// ansonsten DB-Stufe (confirmed/in_production/shipped/received/open)
 const effectiveItemStatus = (r: any): ItemStatus => {
-  const db = (r?.po_item_status as ItemStatus | undefined) ?? undefined;
-  if (db === "canceled") return "canceled";
+  const db = r?.po_item_status as ItemStatus | undefined;
+  if (db === "cancelled") return "cancelled";
+  if (db === "paused") return "paused";
   const derived = deriveItemStatusFromDates(r);
-  if (derived !== "open") return derived;
-  return (db as ItemStatus) ?? "open";
+  if (db === "delivered" || db === "in_production") return db;
+  return derived;
+};
+
+/* ===========================
+   Sketch-Workflow Button
+   =========================== */
+type ConfirmSketchButtonProps = {
+  position: Pick<PosSpecial, "id" | "sketch_needed" | "sketch_confirmed_at" | "po_item_status">;
+  onSuccess?: () => void;
+};
+
+const ConfirmSketchButton: React.FC<ConfirmSketchButtonProps> = ({ position, onSuccess }) => {
+  const { message, modal } = App.useApp();
+  const disabled = !position.sketch_needed || position.sketch_confirmed_at != null;
+
+  const handleConfirm = async () => {
+    modal.confirm({
+      title: "Skizze bestätigen?",
+      content: "Nach Bestätigung rückt eine bestätigte Position automatisch in Produktion vor.",
+      okText: "Bestätigen",
+      cancelText: "Abbrechen",
+      async onOk() {
+        const supabase = supabaseBrowserClient;
+        const { error } = await supabase.rpc("api_po_item_confirm_sketch", {
+          p_item_id: position.id,
+          p_confirmed_on: dayjs().format("YYYY-MM-DD"),
+        });
+        if (error) {
+          message.error(error.message || "Fehler beim Bestätigen der Skizze.");
+          return;
+        }
+        message.success("Skizze wurde bestätigt.");
+        onSuccess?.();
+      },
+    });
+  };
+
+  if (!position.sketch_needed) return null;
+
+  return (
+    <Tooltip
+      title={
+        position.sketch_confirmed_at
+          ? `Bereits bestätigt am ${dayjs(position.sketch_confirmed_at).format("DD.MM.YYYY")}`
+          : "Skizze bestätigen"
+      }
+    >
+      <Button type="primary" icon={<CheckCircleOutlined />} disabled={disabled} onClick={handleConfirm}>
+        Skizze bestätigen
+      </Button>
+    </Tooltip>
+  );
 };
 
 // -------- Drawer State --------
@@ -153,7 +200,7 @@ type DrawerForm = {
 export default function BestellungBearbeitenPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const supabase = React.useMemo(() => supabaseBrowserClient, []);
+  const supabase = React.useMemo(() => supabaseBrowserClient, []); // FIX: init client
   const { message } = App.useApp();
 
   const [form] = Form.useForm<Po>();
@@ -221,7 +268,6 @@ export default function BestellungBearbeitenPage() {
   const [selectedFullSpecial, setSelectedFullSpecial] = React.useState<ProductFull | null>(null);
   const [selectedBaseModel, setSelectedBaseModel] = React.useState<ProductFull | null>(null);
 
-  // Produktdaten hydrieren
   const hydrateProductCache = React.useCallback(
     async (ids: number[]) => {
       const unique = Array.from(new Set(ids.filter((x) => Number.isFinite(x))));
@@ -256,6 +302,33 @@ export default function BestellungBearbeitenPage() {
     [supabase, productCache, message],
   );
 
+  // positions neu laden (für Button onSuccess)
+  const refreshPositions = React.useCallback(async () => {
+    const [{ data: n }, { data: s2 }] = await Promise.all([
+      supabase
+        .from("app_purchase_orders_positions_normal")
+        .select("*")
+        .eq("order_id", id)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("app_purchase_orders_positions_special")
+        .select("*")
+        .eq("order_id", id)
+        .order("created_at", { ascending: true }),
+    ]);
+
+    setPosNormal(n || []);
+    setPosSpecial(s2 || []);
+
+    // Produktdaten hydrieren
+    const normalIds = (n ?? []).map((p) => Number(p.billbee_product_id));
+    const specialIds = (s2 ?? []).flatMap((p) => [
+      Number(p.billbee_product_id),
+      Number(p.base_model_billbee_product_id),
+    ]);
+    hydrateProductCache([...normalIds, ...specialIds]);
+  }, [id, supabase, hydrateProductCache]);
+
   // Load
   React.useEffect(() => {
     (async () => {
@@ -287,33 +360,10 @@ export default function BestellungBearbeitenPage() {
         setOrderSupplierName(s?.name ?? null);
       }
 
-      const [{ data: n }, { data: s2 }] = await Promise.all([
-        supabase
-          .from("app_purchase_orders_positions_normal")
-          .select("*")
-          .eq("order_id", id)
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("app_purchase_orders_positions_special")
-          .select("*")
-          .eq("order_id", id)
-          .order("created_at", { ascending: true }),
-      ]);
-
-      setPosNormal(n || []);
-      setPosSpecial(s2 || []);
-
-      // Produktdaten hydrieren
-      const normalIds = (n ?? []).map((p) => Number(p.billbee_product_id));
-      const specialIds = (s2 ?? []).flatMap((p) => [
-        Number(p.billbee_product_id),
-        Number(p.base_model_billbee_product_id),
-      ]);
-      hydrateProductCache([...normalIds, ...specialIds]);
-
+      await refreshPositions();
       setLoading(false);
     })();
-  }, [id, supabase, form, message, hydrateProductCache]);
+  }, [id, supabase, form, message, refreshPositions]);
 
   const onSave = async () => {
     try {
@@ -321,7 +371,7 @@ export default function BestellungBearbeitenPage() {
       setSaving(true);
       const payload: PoUpdate = {
         supplier_id: v.supplier_id!,
-        status: v.status!, // Werte aus STATUS_OPTIONS (DB-Enum)
+        status: v.status!, // DB-Enum (draft|ordered|confirmed)
         ordered_at: fromDate(v.ordered_at as any)!,
         proforma_confirmed_at: fromDate(v.proforma_confirmed_at as any),
         sketch_confirmed_at: fromDate(v.sketch_confirmed_at as any),
@@ -482,9 +532,7 @@ export default function BestellungBearbeitenPage() {
         .single();
       if (error) throw error;
 
-      setPosNormal((prev) => [...prev, data as any]);
-      hydrateProductCache([Number((data as any).billbee_product_id)]);
-
+      await refreshPositions();
       setOpenNormal(false);
       setSelectedFullNormal(null);
       formNormal.resetFields();
@@ -512,21 +560,15 @@ export default function BestellungBearbeitenPage() {
         qty_ordered: v.qty_ordered ?? 1,
         unit_price_net: v.unit_price_net ?? null,
         dol_actual_at: null,
+        sketch_needed: v.sketch_needed ?? true,
       } as any;
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("app_purchase_orders_positions_special")
-        .insert(insert)
-        .select("*")
-        .single();
+        .insert(insert);
       if (error) throw error;
 
-      setPosSpecial((prev) => [...prev, data as any]);
-      hydrateProductCache([
-        Number((data as any).billbee_product_id),
-        Number((data as any).base_model_billbee_product_id),
-      ]);
-
+      await refreshPositions();
       setOpenSpecial(false);
       setSelectedFullSpecial(null);
       setSelectedBaseModel(null);
@@ -548,7 +590,7 @@ export default function BestellungBearbeitenPage() {
   };
   const cancelEdit = () => {
     setEditingId(null);
-    setEditBuf({});
+    setEditBuf({ });
   };
   const saveEdit = async (row: PosNormal) => {
     const qty = typeof editBuf.qty_ordered === "number" ? editBuf.qty_ordered : 0;
@@ -573,17 +615,7 @@ export default function BestellungBearbeitenPage() {
       return;
     }
 
-    setPosNormal((prev) =>
-      prev.map((p) => {
-        if (p.id !== row.id) return p;
-        const merged = { ...p, ...payload };
-        return {
-          ...merged,
-          po_item_status: effectiveItemStatus(merged as any),
-        };
-      }),
-    );
-
+    await refreshPositions();
     message.success("Position aktualisiert");
     cancelEdit();
   };
@@ -628,6 +660,10 @@ export default function BestellungBearbeitenPage() {
         (editBufSpecial.external_file_url ?? "") === ""
           ? null
           : (editBufSpecial.external_file_url as string | null),
+      sketch_needed:
+        typeof editBufSpecial?.qty_ordered !== "undefined"
+          ? undefined
+          : undefined,
     };
 
     const { error } = await supabase
@@ -640,17 +676,7 @@ export default function BestellungBearbeitenPage() {
       return;
     }
 
-    setPosSpecial((prev) =>
-      prev.map((p) => {
-        if (p.id !== row.id) return p;
-        const merged = { ...p, ...payload };
-        return {
-          ...merged,
-          po_item_status: effectiveItemStatus(merged as any),
-        };
-      }),
-    );
-
+    await refreshPositions();
     message.success("Sonder-Position aktualisiert");
     cancelEditSpecial();
   };
@@ -689,13 +715,7 @@ export default function BestellungBearbeitenPage() {
           .eq("id", (drawerTarget.row as PosNormal).id);
         if (error) throw error;
 
-        setPosNormal((prev) =>
-          prev.map((p) => {
-            if (p.id !== (drawerTarget.row as PosNormal).id) return p;
-            const merged = { ...p, ...payload };
-            return { ...merged, po_item_status: effectiveItemStatus(merged as any) };
-          }),
-        );
+        await refreshPositions();
       } else {
         const { error } = await supabase
           .from("app_purchase_orders_positions_special")
@@ -703,13 +723,7 @@ export default function BestellungBearbeitenPage() {
           .eq("id", (drawerTarget.row as PosSpecial).id);
         if (error) throw error;
 
-        setPosSpecial((prev) =>
-          prev.map((p) => {
-            if (p.id !== (drawerTarget.row as PosSpecial).id) return p;
-            const merged = { ...p, ...payload };
-            return { ...merged, po_item_status: effectiveItemStatus(merged as any) };
-          }),
-        );
+        await refreshPositions();
       }
       message.success("Status aktualisiert");
       setDrawerOpen(false);
@@ -724,119 +738,224 @@ export default function BestellungBearbeitenPage() {
     kind: "normal" | "special",
     ids: React.Key[],
     payload: Partial<
-      Pick<
-        PosNormal,
-        | "proforma_confirmed_at"
-        | "sketch_confirmed_at"
-        | "dol_planned_at"
-        | "dol_actual_at"
-        | "goods_received_at"
-      >
+      Pick<PosNormal, "proforma_confirmed_at" | "dol_planned_at" | "dol_actual_at" | "goods_received_at">
     >,
   ) => {
     if (!ids.length) {
       message.info("Bitte Positionen auswählen.");
       return;
     }
-    const table =
-      kind === "normal"
-        ? "app_purchase_orders_positions_normal"
-        : "app_purchase_orders_positions_special";
+    const table = kind === "normal" ? "app_purchase_orders_positions_normal" : "app_purchase_orders_positions_special";
     const { error } = await supabase.from(table).update(payload as any).in("id", ids as string[]);
     if (error) {
       message.error(error.message);
       return;
     }
-    if (kind === "normal") {
-      setPosNormal((prev) =>
-        prev.map((p) => {
-          if (!ids.includes(p.id)) return p;
-          const merged = { ...p, ...(payload as any) };
-          return { ...merged, po_item_status: effectiveItemStatus(merged as any) };
-        }),
-      );
-      setSelectedNormalKeys([]);
-    } else {
-      setPosSpecial((prev) =>
-        prev.map((p) => {
-          if (!ids.includes(p.id)) return p;
-          const merged = { ...p, ...(payload as any) };
-          return { ...merged, po_item_status: effectiveItemStatus(merged as any) };
-        }),
-      );
-      setSelectedSpecialKeys([]);
-    }
+    await refreshPositions();
+    if (kind === "normal") setSelectedNormalKeys([]);
+    else setSelectedSpecialKeys([]);
     message.success(`${ids.length} Position(en) aktualisiert`);
   };
 
-  const batchMenu = (kind: "normal" | "special") => {
-    const ids = kind === "normal" ? selectedNormalKeys : selectedSpecialKeys;
-    const chooseDate = (label: string, field: keyof DrawerForm) => ({
-      key: `set_${String(field)}`,
-      label,
-      onClick: () => {
-        let picked: Dayjs | null = dayjs();
-        Modal.confirm({
-          title: label,
-          content: (
-            <DatePicker
-              className="w-full"
-              onChange={(d) => {
-                picked = d ?? null;
-              }}
-            />
-          ),
-          okText: "Übernehmen",
-          cancelText: "Abbrechen",
-          onOk: async () => {
-            const payload: any = {};
-            payload[field] = fromDate(picked);
-            await batchUpdatePositions(kind, ids, payload);
-          },
-        });
-      },
-    });
+const batchMenu = (kind: "normal" | "special") => {
+  const ids = kind === "normal" ? selectedNormalKeys : selectedSpecialKeys;
 
-    return {
-      items: [
-        {
-          key: "today_proforma",
-          label: "Proforma bestätigt (heute)",
-          onClick: () =>
-            batchUpdatePositions(kind, ids, {
-              proforma_confirmed_at: dayjs().format("YYYY-MM-DD"),
-            } as any),
-        },
-        {
-          key: "today_sketch",
-          label: "Skizze bestätigt (heute)",
-          onClick: () =>
-            batchUpdatePositions(kind, ids, {
-              sketch_confirmed_at: dayjs().format("YYYY-MM-DD"),
-            } as any),
-        },
-        chooseDate("Lieferung geplant (Datum wählen)", "dol_planned_at"),
-        {
-          key: "today_dol_actual",
-          label: "Lieferung erfolgt (heute)",
-          onClick: () =>
-            batchUpdatePositions(kind, ids, {
-              dol_actual_at: dayjs().format("YYYY-MM-DD"),
-            } as any),
-        },
-        {
-          key: "today_gr",
-          label: "Wareneingang (heute)",
-          onClick: () =>
-            batchUpdatePositions(kind, ids, {
-              goods_received_at: dayjs().format("YYYY-MM-DD"),
-            } as any),
-        },
-      ],
-    };
+  const setBatchStatus = async (next: ItemStatus) => {
+    if (!ids.length) {
+      message.info("Bitte Positionen auswählen.");
+      return;
+    }
+
+    const table =
+      kind === "normal"
+        ? "app_purchase_orders_positions_normal"
+        : "app_purchase_orders_positions_special";
+
+    const { error } = await supabase
+      .from(table)
+      .update({ po_item_status: next })
+      .in("id", ids as string[]);
+
+    if (error) {
+      message.error(error.message);
+      return;
+    }
+
+    await refreshPositions();
+    if (kind === "normal") setSelectedNormalKeys([]);
+    else setSelectedSpecialKeys([]);
+
+    message.success(
+      `${ids.length} Position(en) auf "${ITEM_STATUS_META[next].label}" gesetzt`
+    );
   };
 
-  // ------- Tabellen-Definitionen (fixe Spaltenbreiten, Ellipsis, kein Overflow) -------
+  // Status-Auswahl (ohne "draft", damit keine Downgrades angeboten werden)
+  const statusChoices = (Object.keys(ITEM_STATUS_META) as ItemStatus[])
+    .filter((k) => k !== "draft")
+    .map((k) => ({
+      key: `status_${k}`,
+      label: ITEM_STATUS_META[k].label,
+      onClick: () => setBatchStatus(k),
+    }));
+
+  return { items: statusChoices };
+};
+
+
+  // --------- Hilfs-Komponente: DOL (Einzel-Edit in Tabelle) ---------
+  const DolCell: React.FC<{ row: PosNormal | PosSpecial }> = ({ row }) => {
+    const table =
+      "base_model_billbee_product_id" in row
+        ? "app_purchase_orders_positions_special"
+        : "app_purchase_orders_positions_normal";
+
+    const value = (row as any).dol_actual_at as string | null | undefined;
+
+    return (
+      <Space.Compact className="w-full">
+        <DatePicker
+          className="w-full"
+          value={toDate(value ?? null) as any}
+          onChange={async (d) => {
+            const payload = { dol_actual_at: fromDate(d ?? null) };
+            const { error } = await supabase.from(table).update(payload).eq("id", row.id);
+            if (error) return message.error(error.message);
+            await refreshPositions();
+            message.success("DOL aktualisiert");
+          }}
+        />
+          {/* Verzögerung berechnen und anzeigen */}
+  {row.dol_actual_at && row.dol_planned_at && dayjs(row.dol_actual_at).isAfter(dayjs(row.dol_planned_at)) && (
+    <Typography.Text type="danger">
+      {dayjs(row.dol_actual_at).diff(dayjs(row.dol_planned_at), "day")} Tage verzögert
+    </Typography.Text>
+  )}
+      </Space.Compact>
+    );
+  };
+  // Merker für vorherigen Status (zurücksetzen bei Abbruch)
+const [prevPoStatus, setPrevPoStatus] = React.useState<Po["status"] | undefined>(undefined);
+
+// beim Laden der PO (nach form.setFieldsValue(...))
+React.useEffect(() => {
+  const fetchPo = async () => {
+    const { data: po, error } = await supabase
+      .from("app_purchase_orders")
+      .select("status")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) {
+      message.error(`Fehler beim Laden: ${error.message}`);
+      return;
+    }
+    if (po) setPrevPoStatus(po.status);
+  };
+
+  fetchPo();
+}, [id, supabase, message]);
+
+// Helper: Supplier-Leadtime (Tage)
+const getSupplierLeadtimeDays = React.useCallback(() => {
+  const supId = form.getFieldValue("supplier_id") as string | undefined;
+  if (!supId) return 0;
+  const s = suppliers.find(x => x.id === supId);
+  // Feldname an dein Schema anpassen, falls anders benannt:
+  const dlt = (s as any)?.default_leadtime_days as number | null | undefined;
+  return Number.isFinite(dlt) ? (dlt as number) : 0;
+}, [form, suppliers]);
+
+// Handler für Statuswechsel mit Confirm-Dialog bei "confirmed"
+const handlePoStatusChange = (next: Po["status"]) => {
+  const current = form.getFieldValue("status") as Po["status"] | undefined;
+
+  // Wenn nicht auf confirmed → normal setzen + prevStatus updaten
+  if (next !== "confirmed") {
+    form.setFieldsValue({ status: next });
+    setPrevPoStatus(next);
+    return;
+  }
+
+  // Auf confirmed → Pflichtdialog für DOL geplant
+  const lead = getSupplierLeadtimeDays();
+  let picked: Dayjs | null = dayjs().add(lead, "day");
+
+  Modal.confirm({
+    title: "Geplantes Verladedatum (DOL) festlegen",
+    content: (
+      <div>
+        <p className="mb-2">
+          Vorschlag: <b>{dayjs().add(lead, "day").format("DD.MM.YYYY")}</b> (heute +{" "}
+          {lead} Tage Lieferanten-Leadtime)
+        </p>
+        <DatePicker
+          className="w-full"
+          defaultValue={dayjs().add(lead, "day")}
+          onChange={(d) => (picked = d ?? null)}
+        />
+      </div>
+    ),
+    okText: "Übernehmen & bestätigen",
+    cancelText: "Abbrechen",
+    async onOk() {
+      const dateStr = picked ? picked.format("YYYY-MM-DD") : dayjs().add(lead, "day").format("YYYY-MM-DD");
+      // 1) Formularwerte setzen (Status + Proforma)
+       const { error: ePo } = await supabase
+    .from("app_purchase_orders")
+    .update({
+      status: "confirmed",
+      proforma_confirmed_at: dateStr,
+    })
+    .eq("id", id);
+
+  if (ePo) {
+    message.error(ePo.message);
+    // UI zurück auf vorherigen Status
+    form.setFieldsValue({ status: prevPoStatus ?? "ordered" });
+    return Promise.reject();
+  }
+
+      // Normal
+      const { error: e1 } = await supabase
+        .from("app_purchase_orders_positions_normal")
+        .update({ dol_planned_at: dateStr, dol_actual_at: dateStr })
+        .eq("order_id", id)
+        .is("dol_planned_at", null);
+
+      if (e1) {
+        message.error(e1.message);
+        // Status zurückdrehen
+        form.setFieldsValue({ status: current ?? "ordered" });
+        return Promise.reject();
+      }
+
+      // Special
+      const { error: e2 } = await supabase
+        .from("app_purchase_orders_positions_special")
+        .update({ dol_planned_at: dateStr, dol_actual_at: dateStr })
+        .eq("order_id", id)
+        .is("dol_planned_at", null);
+
+      if (e2) {
+        message.error(e2.message);
+        form.setFieldsValue({ status: current ?? "ordered" });
+        return Promise.reject();
+      }
+
+      await refreshPositions();
+      setPrevPoStatus("confirmed");
+      message.success("Bestellung bestätigt & DOL geplant gesetzt");
+      return Promise.resolve();
+    },
+    onCancel() {
+      // Auswahl zurück auf vorherigen Status
+      form.setFieldsValue({ status: current ?? prevPoStatus ?? "ordered" });
+    },
+  });
+};
+
+
+  // ------- Tabellen-Definitionen -------
   const columnsNormal = [
     {
       title: "SKU",
@@ -904,48 +1023,52 @@ export default function BestellungBearbeitenPage() {
       width: 140,
       render: (_: any, r: PosNormal) => {
         const qty =
-          editingId === r.id
-            ? typeof editBuf.qty_ordered === "number"
-              ? editBuf.qty_ordered
-              : 0
-            : typeof r.qty_ordered === "number"
-            ? r.qty_ordered
-            : 0;
+          editingId === r.id ? (typeof editBuf.qty_ordered === "number" ? editBuf.qty_ordered : 0) : (r.qty_ordered as number);
         const price =
           editingId === r.id
             ? typeof editBuf.unit_price_net === "number"
               ? editBuf.unit_price_net
               : 0
-            : typeof r.unit_price_net === "number"
-            ? r.unit_price_net
-            : 0;
+            : (r.unit_price_net as number) ?? 0;
         return <Text>{(qty * (price || 0)).toFixed(2)}</Text>;
       },
     },
     {
+      title: "Verladung erwartet (DoL)",
+      width: 200,
+      render: (_: any, r: PosNormal) => <DolCell row={r} />,
+    },
+    {
       title: "Status",
-      width: 120,
+      width: 160,
       render: (_: any, r: PosNormal) => {
-        const s = effectiveItemStatus(r);
-        const meta = ITEM_STATUS_META[s] ?? ITEM_STATUS_META.open;
-        const tip =
-          s === "in_production" && r.dol_planned_at
-            ? `Geplant: ${dayjs(r.dol_planned_at).format("DD.MM.")}`
-            : s === "shipped" && r.dol_actual_at
-            ? `Versandt: ${dayjs(r.dol_actual_at).format("DD.MM.")}`
-            : s === "received" && r.goods_received_at
-            ? `WE: ${dayjs(r.goods_received_at).format("DD.MM.")}`
-            : meta.label;
+        const s = (r.po_item_status as ItemStatus) || effectiveItemStatus(r);
+        const meta = ITEM_STATUS_META[s];
+        const updateStatus = async (next: ItemStatus) => {
+  const { error } = await supabase
+    .from("app_purchase_orders_positions_normal")
+    .update({ po_item_status: next })
+    .eq("id", r.id);
+  if (error) return message.error(error.message);
+  await refreshPositions();
+  message.success("Status aktualisiert");
+};
+
         return (
-          <Tooltip title={tip}>
-            <Tag
-              color={meta.color}
-              style={{ cursor: "pointer" }}
-              onClick={() => openStatusDrawer({ kind: "normal", row: r })}
-            >
+          <Dropdown
+            trigger={["click"]}
+            menu={{
+              items: (Object.keys(ITEM_STATUS_META) as ItemStatus[]).map((k) => ({
+                key: k,
+                label: ITEM_STATUS_META[k].label,
+                onClick: () => updateStatus(k),
+              })),
+            }}
+          >
+            <Tag color={meta.color} style={{ cursor: "pointer" }}>
               {meta.icon} {meta.label}
             </Tag>
-          </Tooltip>
+          </Dropdown>
         );
       },
     },
@@ -964,12 +1087,8 @@ export default function BestellungBearbeitenPage() {
         ),
     },
     {
-      title: (
-        <Dropdown menu={batchMenu("normal")} trigger={["click"]}>
-          <Button size="small">Batch Status</Button>
-        </Dropdown>
-      ),
-      width: 140,
+      title: "Aktionen",
+      width: 120,
       fixed: "right" as const,
       render: (_: any, r: PosNormal) =>
         editingId === r.id ? (
@@ -982,44 +1101,37 @@ export default function BestellungBearbeitenPage() {
             </Button>
           </Space>
         ) : (
-          <Space direction="vertical" size="small" style={{ width: "100%" }}>
-            <Button size="small" block onClick={() => startEdit(r)}>
+          <Space size="small">
+            <Button size="small" onClick={() => startEdit(r)}>
               <EditOutlined />
             </Button>
             <Button
               danger
               size="small"
-              block
               onClick={async () => {
-                const { error } = await supabase
-                  .from("app_purchase_orders_positions_normal")
-                  .delete()
-                  .eq("id", r.id);
+                const { error } = await supabase.from("app_purchase_orders_positions_normal").delete().eq("id", r.id);
                 if (error) return message.error(error.message);
-                setPosNormal((prev) => prev.filter((x) => x.id !== r.id));
+                await refreshPositions();
                 message.success("Gelöscht");
               }}
             >
-              <DeleteOutlined /> 
+              <DeleteOutlined />
             </Button>
           </Space>
         ),
     },
   ];
 
-  // ------- Spezial: Anzeige mit SB-Produkt + Grundmodell, Defaults vom Grundmodell -------
   const columnsSpecial = [
     {
       title: "SKU",
       width: 240,
       render: (_: any, r: PosSpecial) => {
-        const sb = productCache[Number(r.billbee_product_id)]; // Sonderbestellung-Produkt
-        const base = productCache[Number(r.base_model_billbee_product_id!)]; // Grundmodell
+        const sb = productCache[Number(r.billbee_product_id)];
+        const base = productCache[Number(r.base_model_billbee_product_id!)];
         return (
           <div>
-            <div style={{ fontSize: 12, color: "rgba(0,0,0,.45)" }}>
-              {sb?.name ?? "Sonderbestellung"}
-            </div>
+            <div style={{ fontSize: 12, color: "rgba(0,0,0,.45)" }}>{sb?.name ?? "Sonderbestellung"}</div>
             <div style={{ fontWeight: 500 }}>{base?.sku ?? "—"}</div>
           </div>
         );
@@ -1059,6 +1171,21 @@ export default function BestellungBearbeitenPage() {
       },
     },
     {
+      title: "Skizze",
+      width: 200,
+      render: (_: any, r: PosSpecial) => (
+        <ConfirmSketchButton
+          position={{
+            id: r.id,
+            sketch_needed: Boolean(r.sketch_needed),
+            sketch_confirmed_at: r.sketch_confirmed_at,
+            po_item_status: r.po_item_status,
+          }}
+          onSuccess={refreshPositions}
+        />
+      ),
+    },
+    {
       title: "Menge",
       width: 110,
       render: (_: any, r: PosSpecial) =>
@@ -1079,8 +1206,7 @@ export default function BestellungBearbeitenPage() {
       width: 140,
       render: (_: any, r: PosSpecial) => {
         const base = productCache[Number(r.base_model_billbee_product_id!)];
-        const effectivePrice =
-          typeof r.unit_price_net === "number" ? r.unit_price_net : base?.net_purchase_price ?? 0;
+        const effectivePrice = typeof r.unit_price_net === "number" ? r.unit_price_net : base?.net_purchase_price ?? 0;
         return editingSpecialId === r.id ? (
           <InputNumber
             value={
@@ -1091,10 +1217,7 @@ export default function BestellungBearbeitenPage() {
                 : r.unit_price_net ?? base?.net_purchase_price ?? null
             }
             onChange={(v) =>
-              setEditBufSpecial((s) => ({
-                ...s,
-                unit_price_net: v === null || v === undefined ? null : Number(v),
-              }))
+              setEditBufSpecial((s) => ({ ...s, unit_price_net: v === null || v === undefined ? null : Number(v) }))
             }
             min={0}
             step={0.01}
@@ -1130,29 +1253,41 @@ export default function BestellungBearbeitenPage() {
       },
     },
     {
+      title: "Verladung erwartet (DoL)",
+      width: 200,
+      render: (_: any, r: PosSpecial) => <DolCell row={r} />,
+    },
+    {
       title: "Status",
-      width: 120,
+      width: 160,
       render: (_: any, r: PosSpecial) => {
-        const s = effectiveItemStatus(r);
-        const meta = ITEM_STATUS_META[s] ?? ITEM_STATUS_META.open;
-        const tip =
-          s === "in_production" && r.dol_planned_at
-            ? `Geplant: ${dayjs(r.dol_planned_at).format("DD.MM.")}`
-            : s === "shipped" && r.dol_actual_at
-            ? `Versandt: ${dayjs(r.dol_actual_at).format("DD.MM.")}`
-            : s === "received" && r.goods_received_at
-            ? `WE: ${dayjs(r.goods_received_at).format("DD.MM.")}`
-            : meta.label;
+        const s = (r.po_item_status as ItemStatus) || effectiveItemStatus(r);
+        const meta = ITEM_STATUS_META[s];
+        const updateStatus = async (next: ItemStatus) => {
+  const { error } = await supabase
+    .from("app_purchase_orders_positions_special")
+    .update({ po_item_status: next })
+    .eq("id", r.id);
+  if (error) return message.error(error.message);
+  await refreshPositions();
+  message.success("Status aktualisiert");
+};
+
         return (
-          <Tooltip title={tip}>
-            <Tag
-              color={meta.color}
-              style={{ cursor: "pointer" }}
-              onClick={() => openStatusDrawer({ kind: "special", row: r })}
-            >
+          <Dropdown
+            trigger={["click"]}
+            menu={{
+              items: (Object.keys(ITEM_STATUS_META) as ItemStatus[]).map((k) => ({
+                key: k,
+                label: ITEM_STATUS_META[k].label,
+                onClick: () => updateStatus(k),
+              })),
+            }}
+          >
+            <Tag color={meta.color} style={{ cursor: "pointer" }}>
               {meta.icon} {meta.label}
             </Tag>
-          </Tooltip>
+          </Dropdown>
         );
       },
     },
@@ -1169,13 +1304,7 @@ export default function BestellungBearbeitenPage() {
         ) : r.external_file_url ? (
           <Space>
             <Tooltip title="Planungsdokumente öffnen">
-              <Button
-                size="small"
-                type="default"
-                icon={<FileTextOutlined />}
-                href={r.external_file_url as string}
-                target="_blank"
-              />
+              <Button size="small" type="default" icon={<FileTextOutlined />} href={r.external_file_url as string} target="_blank" />
             </Tooltip>
           </Space>
         ) : (
@@ -1185,25 +1314,11 @@ export default function BestellungBearbeitenPage() {
     {
       title: "AB-Ref",
       width: 160,
-      render: (_: any, r: PosSpecial) =>
-        editingSpecialId === r.id ? (
-          <Input
-            value={editBufSpecial.order_confirmation_ref ?? ""}
-            onChange={(e) =>
-              setEditBufSpecial((s) => ({ ...s, order_confirmation_ref: e.target.value }))
-            }
-          />
-        ) : (
-          cellEllipsis(r.order_confirmation_ref ?? "—", r.order_confirmation_ref ?? "—")
-        ),
+      render: (_: any, r: PosSpecial) => cellEllipsis(r.order_confirmation_ref ?? "—", r.order_confirmation_ref ?? "—"),
     },
     {
-      title: (
-        <Dropdown menu={batchMenu("special")} trigger={["click"]}>
-          <Button size="small">Batch Status</Button>
-        </Dropdown>
-      ),
-      width: 140,
+      title: "Aktionen",
+      width: 120,
       fixed: "right" as const,
       render: (_: any, r: PosSpecial) =>
         editingSpecialId === r.id ? (
@@ -1216,21 +1331,17 @@ export default function BestellungBearbeitenPage() {
             </Button>
           </Space>
         ) : (
-          <Space direction="vertical" size="small" style={{ width: "100%" }}>
-            <Button size="small" block onClick={() => startEditSpecial(r)}>
+          <Space size="small">
+            <Button size="small" onClick={() => startEditSpecial(r)}>
               <EditOutlined />
             </Button>
             <Button
               danger
               size="small"
-              block
               onClick={async () => {
-                const { error } = await supabase
-                  .from("app_purchase_orders_positions_special")
-                  .delete()
-                  .eq("id", r.id);
+                const { error } = await supabase.from("app_purchase_orders_positions_special").delete().eq("id", r.id);
                 if (error) return message.error(error.message);
-                setPosSpecial((prev) => prev.filter((x) => x.id !== r.id));
+                await refreshPositions();
                 message.success("Gelöscht");
               }}
             >
@@ -1283,8 +1394,15 @@ export default function BestellungBearbeitenPage() {
                         </Form.Item>
                       </Col>
                       <Col xs={24} md={8}>
-                        <Form.Item label="Status" name="status" rules={[{ required: true, message: "Pflichtfeld" }]}>
-                          <Select options={STATUS_OPTIONS as any} />
+                        <Form.Item
+                          label="Status"
+                          name="status"
+                          rules={[{ required: true, message: "Pflichtfeld" }]}
+                        >
+                          <Select
+                            options={STATUS_OPTIONS as any}   // oder PO_STATUS_OPTIONS, falls du die erweiterte Liste nutzt
+                            onChange={handlePoStatusChange}
+                          />
                         </Form.Item>
                       </Col>
                     </Row>
@@ -1314,7 +1432,7 @@ export default function BestellungBearbeitenPage() {
 
                     <Row gutter={12}>
                       <Col xs={24} md={6}>
-                        <Form.Item label="Lieferung erfolgt" name="dol_actual_at">
+                        <Form.Item label="Verladung erwartet (DOL)" name="dol_actual_at">
                           <DatePicker className="w-full" />
                         </Form.Item>
                       </Col>
@@ -1376,7 +1494,7 @@ export default function BestellungBearbeitenPage() {
                     extra={
                       <Space>
                         <Dropdown menu={batchMenu("normal")} trigger={["click"]}>
-                          <Button size="small">Batch Status</Button>
+                          <Button size="small">Batch</Button>
                         </Dropdown>
                         <Button onClick={() => setOpenNormal(true)}>+ Hinzufügen</Button>
                       </Space>
@@ -1389,7 +1507,7 @@ export default function BestellungBearbeitenPage() {
                       pagination={false}
                       columns={columnsNormal as any}
                       tableLayout="fixed"
-                      scroll={{ x: 1300 }}
+                      scroll={{ x: 1400 }}
                       style={{ wordBreak: "break-word" }}
                       rowSelection={{
                         selectedRowKeys: selectedNormalKeys,
@@ -1404,7 +1522,7 @@ export default function BestellungBearbeitenPage() {
                     extra={
                       <Space>
                         <Dropdown menu={batchMenu("special")} trigger={["click"]}>
-                          <Button size="small">Batch Status</Button>
+                          <Button size="small">Batch</Button>
                         </Dropdown>
                         <Button onClick={() => setOpenSpecial(true)}>+ Hinzufügen</Button>
                       </Space>
@@ -1417,7 +1535,7 @@ export default function BestellungBearbeitenPage() {
                       pagination={false}
                       columns={columnsSpecial as any}
                       tableLayout="fixed"
-                      scroll={{ x: 1400 }}
+                      scroll={{ x: 1500 }}
                       style={{ wordBreak: "break-word" }}
                       rowSelection={{
                         selectedRowKeys: selectedSpecialKeys,
@@ -1449,7 +1567,7 @@ export default function BestellungBearbeitenPage() {
               <AutoComplete
                 onSearch={(q) => searchProducts(q, "normal")}
                 options={optionsNormal}
-                onSelect={(_, o) => onSelectNormal(_, o as Option)}
+                onSelect={(_, o) => onSelectNormal(_, o as any)}
                 placeholder="Gefiltert nach Lieferant (manufacturer)"
                 notFoundContent={searchingNormal ? "Suche..." : undefined}
                 className="w-full"
@@ -1512,7 +1630,7 @@ export default function BestellungBearbeitenPage() {
               <AutoComplete
                 onSearch={(q) => searchProducts(q, "special")}
                 options={optionsSpecial}
-                onSelect={(_, o) => onSelectSpecial(_, o as Option)}
+                onSelect={(_, o) => onSelectSpecial(_, o as any)}
                 placeholder='Elternartikel (Sonder …), gefiltert nach manufacturer'
                 notFoundContent={searchingSpecial ? "Suche..." : undefined}
                 className="w-full"
@@ -1524,7 +1642,7 @@ export default function BestellungBearbeitenPage() {
               <AutoComplete
                 onSearch={(q) => searchProducts(q, "base")}
                 options={optionsBase}
-                onSelect={(_, o) => onSelectBaseModel(_, o as Option)}
+                onSelect={(_, o) => onSelectBaseModel(_, o as any)}
                 placeholder="Grundmodell (liefert Ext. SKU / EK / Details)"
                 notFoundContent={searchingBase ? "Suche..." : undefined}
                 className="w-full"
@@ -1535,24 +1653,16 @@ export default function BestellungBearbeitenPage() {
             {(selectedFullSpecial || selectedBaseModel) && (
               <Descriptions size="small" column={1} className="mb-2">
                 {selectedFullSpecial && (
-                  <Descriptions.Item label="SB-Produkt">
-                    {selectedFullSpecial.name ?? "—"}
-                  </Descriptions.Item>
+                  <Descriptions.Item label="SB-Produkt">{selectedFullSpecial.name ?? "—"}</Descriptions.Item>
                 )}
                 {selectedBaseModel && (
                   <>
-                    <Descriptions.Item label="Grundmodell SKU">
-                      {selectedBaseModel.sku ?? "—"}
-                    </Descriptions.Item>
+                    <Descriptions.Item label="Grundmodell SKU">{selectedBaseModel.sku ?? "—"}</Descriptions.Item>
                     <Descriptions.Item label="Grundmodell Ext. SKU">
                       {selectedBaseModel.external_sku ?? "—"}
                     </Descriptions.Item>
-                    <Descriptions.Item label="Details (Vorschlag)">
-                      {selectedBaseModel.purchase_details ?? "—"}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="EK (Vorschlag)">
-                      {selectedBaseModel.net_purchase_price ?? "—"}
-                    </Descriptions.Item>
+                    <Descriptions.Item label="Details (Vorschlag)">{selectedBaseModel.purchase_details ?? "—"}</Descriptions.Item>
+                    <Descriptions.Item label="EK (Vorschlag)">{selectedBaseModel.net_purchase_price ?? "—"}</Descriptions.Item>
                   </>
                 )}
               </Descriptions>
@@ -1600,61 +1710,11 @@ export default function BestellungBearbeitenPage() {
             <Form.Item label="Planungsdokumente (Link)" name="external_file_url">
               <Input prefix={<LinkOutlined />} placeholder="https://…" />
             </Form.Item>
+            <Form.Item label="Skizze benötigt" name="sketch_needed" valuePropName="checked" initialValue={true}>
+              <Switch />
+            </Form.Item>
           </Form>
         </Modal>
-
-        {/* Drawer: Status & Termine */}
-        <Drawer
-          title="Status & Termine"
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          width={420}
-          extra={
-            <Space>
-              <Button onClick={() => setDrawerOpen(false)}>Schließen</Button>
-              <Button type="primary" onClick={saveStatusDrawer}>
-                Speichern
-              </Button>
-            </Space>
-          }
-        >
-          <Form form={drawerForm} layout="vertical">
-            <Form.Item label="Proforma bestätigt" name="proforma_confirmed_at">
-              <Space.Compact className="w-full">
-                <DatePicker className="w-full" />
-                <Button onClick={() => drawerForm.setFieldValue("proforma_confirmed_at", null)}>Leeren</Button>
-              </Space.Compact>
-            </Form.Item>
-
-            <Form.Item label="Skizze bestätigt" name="sketch_confirmed_at">
-              <Space.Compact className="w-full">
-                <DatePicker className="w-full" />
-                <Button onClick={() => drawerForm.setFieldValue("sketch_confirmed_at", null)}>Leeren</Button>
-              </Space.Compact>
-            </Form.Item>
-
-            <Form.Item label="Lieferung geplant" name="dol_planned_at">
-              <Space.Compact className="w-full">
-                <DatePicker className="w-full" />
-                <Button onClick={() => drawerForm.setFieldValue("dol_planned_at", null)}>Leeren</Button>
-              </Space.Compact>
-            </Form.Item>
-
-            <Form.Item label="Lieferung erfolgt" name="dol_actual_at">
-              <Space.Compact className="w-full">
-                <DatePicker className="w-full" />
-                <Button onClick={() => drawerForm.setFieldValue("dol_actual_at", null)}>Leeren</Button>
-              </Space.Compact>
-            </Form.Item>
-
-            <Form.Item label="Wareneingang" name="goods_received_at">
-              <Space.Compact className="w-full">
-                <DatePicker className="w-full" />
-                <Button onClick={() => drawerForm.setFieldValue("goods_received_at", null)}>Leeren</Button>
-              </Space.Compact>
-            </Form.Item>
-          </Form>
-        </Drawer>
       </div>
     </App>
   );

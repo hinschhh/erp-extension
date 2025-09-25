@@ -24,13 +24,8 @@ type Supplier = Tables<"app_suppliers">;
 type PoInsert = TablesInsert<"app_purchase_orders">;
 
 const STATUS_OPTIONS = [
+  { value: "draft", label: "Entwurf" },
   { value: "ordered", label: "Bestellt" },
-  { value: "proforma", label: "Proforma bestätigt" },
-  { value: "sketch_confirmed", label: "Skizze bestätigt" },
-  { value: "dol_planned", label: "Lieferung geplant" },
-  { value: "dol_actual", label: "Lieferung erfolgt" },
-  { value: "goods_received", label: "Wareneingang" },
-  { value: "invoiced", label: "Rechnung erhalten" },
 ];
 
 const fromDate = (d?: Dayjs | null) => (d ? d.format("YYYY-MM-DD") : null);
@@ -113,7 +108,7 @@ export default function BestellungAnlegenPage() {
         <Form
           form={form}
           layout="vertical"
-          initialValues={{ status: "ordered", ordered_at: dayjs() }}
+          initialValues={{ status: "draft", ordered_at: dayjs() }}
         >
           <Row gutter={12}>
             <Col xs={24} md={8}>
