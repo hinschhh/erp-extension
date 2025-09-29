@@ -799,7 +799,7 @@ const Page: React.FC = () => {
         </Row>
         < Divider />
         <Col style={{ display: "flex", justifyContent: "flex-end" }}>
-          <Button type="primary" onClick={() => router.push("/einkauf/bestellungen/nanlegen")}>
+          <Button type="primary" onClick={() => router.push("/einkauf/bestellungen/anlegen")}>
             Bestellung anlegen
           </Button>
         </Col>
