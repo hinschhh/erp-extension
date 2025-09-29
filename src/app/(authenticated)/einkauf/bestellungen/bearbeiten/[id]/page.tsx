@@ -1,4 +1,3 @@
-// src/app/(authenticated)/einkauf/bestellungen/bearbeiten/[id]/page.tsx
 "use client";
 
 import React from "react";
@@ -26,8 +25,11 @@ import {
   Tag,
   Tooltip,
   Typography,
-  Drawer,
   Switch,
+  Alert,
+  Steps,
+  Progress,
+  Divider
 } from "antd";
 import {
   FileTextOutlined,
@@ -45,7 +47,7 @@ import dayjs, { Dayjs } from "dayjs";
 
 const { Paragraph, Text } = Typography;
 
-// DB-Typen
+// -------------------- DB-Typen --------------------
 type Po = Tables<"app_purchase_orders">;
 type PoUpdate = Partial<Po>;
 type PosNormal = Tables<"app_purchase_orders_positions_normal">;
@@ -63,7 +65,7 @@ type ProductFull = {
   net_purchase_price: number | null;
 };
 
-// -------- Order-Status (UI – DB ist maßgeblich für Drilldown/Rollup) --------
+// -------- Order-Status (UI – DB ist maßgeblich) --------
 const STATUS_OPTIONS = [
   { value: "draft", label: "Entwurf" },
   { value: "ordered", label: "Bestellt" },
@@ -72,7 +74,7 @@ const STATUS_OPTIONS = [
   { value: "in_production", label: "In Produktion", disabled: true },
   { value: "partially_delivered", label: "Teilw. geliefert", disabled: true },
   { value: "delivered", label: "Geliefert", disabled: true },
-  { value: "cancelled", label: "Storniert" }, // manuell erlaubt
+  { value: "cancelled", label: "Storniert" },
 ] as const;
 
 const toDate = (d?: string | null) => (d ? dayjs(d) : undefined);
@@ -84,6 +86,30 @@ const cellEllipsis = (content?: React.ReactNode, tooltip?: React.ReactNode) => (
     {content ?? "—"}
   </Paragraph>
 );
+// --- Helper: Geldformat ---
+const formatEUR = (n: number) =>
+  (n ?? 0).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+
+// --- Helper: Status → Step-Index ---
+const statusToStepIndex = (s?: Po["status"]) => {
+  switch (s) {
+    case "draft": return 0;
+    case "ordered": return 1;
+    // alles ab "confirmed" bis inkl. teilw. geliefert zählt als Step 2..3
+    case "confirmed":
+    case "in_production":
+    case "partially_in_production":
+      return 2;
+    case "partially_delivered":
+    case "delivered":
+      return 3;
+    case "cancelled":
+      return 3; // wir zeigen zusätzlich ein rotes Tag im UI (s.u.)
+    default:
+      return 0;
+  }
+};
+
 
 // -------- Positions-Status --------
 type ItemStatus =
@@ -106,7 +132,7 @@ const ITEM_STATUS_META: Record<ItemStatus, { color: string; icon: React.ReactNod
     cancelled: { color: "red", icon: <CloseOutlined />, label: "Storniert" },
   };
 
-// Fallback-Ableitung aus Datumsfeldern (nur Anzeige/Optimistic)
+// Fallback-Ableitung nur für Anzeige (DB ist Quelle der Wahrheit)
 const deriveItemStatusFromDates = (r: {
   proforma_confirmed_at?: string | null;
   sketch_confirmed_at?: string | null;
@@ -119,16 +145,13 @@ const deriveItemStatusFromDates = (r: {
   if (r.dol_planned_at) return "in_production";
   if (r.sketch_confirmed_at) return "in_production";
   if (r.proforma_confirmed_at) return "confirmed";
-  return "confirmed";
+  return "draft";
 };
 
 const effectiveItemStatus = (r: any): ItemStatus => {
   const db = r?.po_item_status as ItemStatus | undefined;
-  if (db === "cancelled") return "cancelled";
-  if (db === "paused") return "paused";
-  const derived = deriveItemStatusFromDates(r);
-  if (db === "delivered" || db === "in_production") return db;
-  return derived;
+  if (db) return db;
+  return deriveItemStatusFromDates(r);
 };
 
 /* ===========================
@@ -151,7 +174,7 @@ const ConfirmSketchButton: React.FC<ConfirmSketchButtonProps> = ({ position, onS
       cancelText: "Abbrechen",
       async onOk() {
         const supabase = supabaseBrowserClient;
-        const { error } = await supabase.rpc("api_po_item_confirm_sketch", {
+        const { error } = await supabase.rpc("rpc_po_confirm_sketch", {
           p_item_id: position.id,
           p_confirmed_on: dayjs().format("YYYY-MM-DD"),
         });
@@ -164,7 +187,7 @@ const ConfirmSketchButton: React.FC<ConfirmSketchButtonProps> = ({ position, onS
       },
     });
   };
-
+  
   if (!position.sketch_needed) return null;
 
   return (
@@ -182,25 +205,11 @@ const ConfirmSketchButton: React.FC<ConfirmSketchButtonProps> = ({ position, onS
   );
 };
 
-// -------- Drawer State --------
-type EditTarget =
-  | { kind: "normal"; row: PosNormal }
-  | { kind: "special"; row: PosSpecial }
-  | null;
-
-// Date fields we manage in drawer
-type DrawerForm = {
-  proforma_confirmed_at?: Dayjs | null;
-  sketch_confirmed_at?: Dayjs | null;
-  dol_planned_at?: Dayjs | null;
-  dol_actual_at?: Dayjs | null;
-  goods_received_at?: Dayjs | null;
-};
-
+// -------------------- Seite --------------------
 export default function BestellungBearbeitenPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const supabase = React.useMemo(() => supabaseBrowserClient, []); // FIX: init client
+  const supabase = React.useMemo(() => supabaseBrowserClient, []);
   const { message } = App.useApp();
 
   const [form] = Form.useForm<Po>();
@@ -212,6 +221,11 @@ export default function BestellungBearbeitenPage() {
 
   const [posNormal, setPosNormal] = React.useState<PosNormal[]>([]);
   const [posSpecial, setPosSpecial] = React.useState<PosSpecial[]>([]);
+
+  // Tabellen-Paginierung
+  const [pageNormal, setPageNormal] = React.useState(1);
+  const [pageSpecial, setPageSpecial] = React.useState(1);
+  const pageSize = 50;
 
   // Auswahl für Batch-Aktionen
   const [selectedNormalKeys, setSelectedNormalKeys] = React.useState<React.Key[]>([]);
@@ -236,10 +250,83 @@ export default function BestellungBearbeitenPage() {
     external_file_url?: string | null;
   }>({});
 
-  // Status Drawer
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
-  const [drawerTarget, setDrawerTarget] = React.useState<EditTarget>(null);
-  const [drawerForm] = Form.useForm<DrawerForm>();
+    // Für die Auswertung:
+  // --- Summen Positionen ---
+const sumNormal = posNormal.reduce(
+  (acc, r) => acc + Number(r.qty_ordered ?? 0) * Number(r.unit_price_net ?? 0),
+  0,
+);
+const sumSpecial = posSpecial.reduce(
+  (acc, r) => acc + Number(r.qty_ordered ?? 0) * Number(r.unit_price_net ?? 0),
+  0,
+);
+const sumPositions = sumNormal + sumSpecial;
+
+// --- Versandkosten / Separate Invoice (robust auf beide Schreibweisen) ---
+const shipping = Number(form.getFieldValue("shipping_cost_net") ?? 0);
+const separateInvoice =
+  Boolean(
+    form.getFieldValue("separate_invoice_for_shipping_cost"),
+  );
+
+// Versandkosten, die auf der Rechnung dieser Bestellung stehen
+const shippingOnInvoice = separateInvoice ? 0 : shipping;
+
+// Versandkosten als Anschaffungsnebenkosten (separate Rechnung)
+const ancillaryCosts = separateInvoice ? shipping : 0;
+
+// Rechnungssumme (nur Positionen + evtl. Versand auf Rechnung)
+const invoiceSum = sumPositions + shippingOnInvoice;
+
+// Anschaffungskosten (Rechnungssumme + Nebenkosten)
+const acquisitionCost = invoiceSum + ancillaryCosts;
+
+// --- Status-Helper ---
+const isActiveItem = (p: any) => {
+  const s = effectiveItemStatus(p);
+  return s !== "paused" && s !== "cancelled";
+};
+
+// --- Zählungen pausiert/storniert (für Hinweis) ---
+const pausedNormal = posNormal.filter((p) => effectiveItemStatus(p) === "paused").length;
+const pausedSpecial = posSpecial.filter((p) => effectiveItemStatus(p) === "paused").length;
+const cancelledNormal = posNormal.filter((p) => effectiveItemStatus(p) === "cancelled").length;
+const cancelledSpecial = posSpecial.filter((p) => effectiveItemStatus(p) === "cancelled").length;
+
+const pausedTotal = pausedNormal + pausedSpecial;
+const cancelledTotal = cancelledNormal + cancelledSpecial;
+
+// --- Aktive Positionen (für Progress-Berechnungen) ---
+const normalActive = posNormal.filter(isActiveItem);
+const specialActive = posSpecial.filter(isActiveItem);
+
+const totalActiveNormal = normalActive.length;
+const totalActiveSpecial = specialActive.length;
+const totalActivePositions = totalActiveNormal + totalActiveSpecial;
+
+// --- Delivered-Progress (nur aktive Positionen) ---
+const deliveredActiveNormal = normalActive.filter((p) => effectiveItemStatus(p) === "delivered").length;
+const deliveredActiveSpecial = specialActive.filter((p) => effectiveItemStatus(p) === "delivered").length;
+const deliveredActiveTotal = deliveredActiveNormal + deliveredActiveSpecial;
+
+const deliveredPercent = totalActivePositions
+  ? Math.round((deliveredActiveTotal / totalActivePositions) * 100)
+  : 0;
+
+// --- Sketch-Progress (nur aktive Sonder-Positionen mit sketch_needed = true) ---
+const sketchRequired = specialActive.filter((p) => Boolean(p.sketch_needed)).length;
+const sketchConfirmed = specialActive.filter((p) => Boolean(p.sketch_needed) && p.sketch_confirmed_at).length;
+
+const sketchPercent = sketchRequired ? Math.round((sketchConfirmed / sketchRequired) * 100) : 0;
+
+
+// --- Verspätungsinfo wie gehabt ---
+const dolPlanned = form.getFieldValue("dol_planned_at") as Dayjs | undefined;
+const dolActual  = form.getFieldValue("dol_actual_at") as Dayjs | undefined;
+const hasDelay   = dolPlanned && dolActual && dolActual.isAfter(dolPlanned);
+const delayDays  = hasDelay ? dolActual!.diff(dolPlanned!, "day") : 0;
+
+
 
   // Produkt-Cache
   const [productCache, setProductCache] = React.useState<Record<number, ProductFull>>({});
@@ -267,6 +354,173 @@ export default function BestellungBearbeitenPage() {
   const [selectedFullNormal, setSelectedFullNormal] = React.useState<ProductFull | null>(null);
   const [selectedFullSpecial, setSelectedFullSpecial] = React.useState<ProductFull | null>(null);
   const [selectedBaseModel, setSelectedBaseModel] = React.useState<ProductFull | null>(null);
+
+  // =====================
+// Produkt-Suche & Select-Handler
+// =====================
+
+// (Optional) Umschalter, falls ihr in rpt_products_full bereits eine FTS-Spalte wie "fts" / "search" habt.
+const ENABLE_FTS = false; // auf true setzen, wenn tsvector-Spalte existiert
+
+// Supabase-Suche nach Produkten – gefiltert nach Hersteller = Lieferant
+const searchProducts = React.useCallback(
+  async (q: string, mode: "normal" | "special" | "base") => {
+    const supplierName = orderSupplierName?.trim();
+    if (!supplierName || !q || q.trim().length < 2) {
+      if (mode === "normal") setOptionsNormal([]);
+      if (mode === "special") setOptionsSpecial([]);
+      if (mode === "base") setOptionsBase([]);
+      return;
+    }
+
+    if (mode === "normal") setSearchingNormal(true);
+    if (mode === "special") setSearchingSpecial(true);
+    if (mode === "base") setSearchingBase(true);
+
+    // 1) Versuch: Full-Text-Search (wenn konfiguriert)
+    let data: any[] | null = null;
+    let error: any = null;
+
+    if (ENABLE_FTS) {
+  const { data: d1, error: e1 } = await supabase
+    .from("rpt_products_full")
+    .select("id,sku,external_sku,name,manufacturer,purchase_details,net_purchase_price")
+    .ilike("manufacturer", `%${supplierName}%`)
+    // PostgREST-Operator für Fulltext:
+    // 'wfts' = websearch_to_tsquery, alternativ: 'plfts' (plainto), 'phfts' (phrase), 'fts' (to_tsquery)
+    .filter("sku", "wfts", q)
+    .limit(100);
+
+  data = d1 ?? null;
+  error = e1 ?? null;
+}
+
+    // 2) Fallback: ILIKE auf ein paar Felder
+    if (!ENABLE_FTS || error) {
+      const { data: d2, error: e2 } = await supabase
+        .from("rpt_products_full")
+        .select("id,sku,external_sku,name,manufacturer,purchase_details,net_purchase_price")
+        .ilike("manufacturer", `%${supplierName}%`)
+        .or(
+          [
+            `external_sku.ilike.%${q}%`,
+            `name.ilike.%${q}%`,
+            `purchase_details.ilike.%${q}%`,
+            `sku.ilike.%${q}%`,
+          ].join(","),
+        )
+        .limit(100);
+      data = d2 ?? null;
+      error = e2 ?? null;
+    }
+
+    if (error) {
+      if (mode === "normal") setSearchingNormal(false);
+      if (mode === "special") setSearchingSpecial(false);
+      if (mode === "base") setSearchingBase(false);
+      return message.error(error.message || "Produktsuche fehlgeschlagen.");
+    }
+
+    const filtered: ProductFull[] = (data ?? []).map((r: any) => ({
+      billbee_product_id: r.id,
+      sku: r.sku ?? null,
+      external_sku: r.external_sku ?? null,
+      name: r.name ?? null,
+      manufacturer: r.manufacturer ?? null,
+      purchase_details: r.purchase_details ?? null,
+      net_purchase_price: r.net_purchase_price ?? null,
+    }));
+
+    const opts: Option[] = filtered.map((r) => ({
+      value: String(r.billbee_product_id),
+      label: `${r.sku ?? "(ohne SKU)"} — ${r.external_sku ?? ""}`,
+      full: r,
+    }));
+
+    if (mode === "normal") {
+      setOptionsNormal(opts);
+      setSearchingNormal(false);
+    } else if (mode === "special") {
+      setOptionsSpecial(opts);
+      setSearchingSpecial(false);
+    } else {
+      setOptionsBase(opts);
+      setSearchingBase(false);
+    }
+  },
+  [
+    orderSupplierName,
+    supabase,
+    message,
+    setOptionsNormal,
+    setOptionsSpecial,
+    setOptionsBase,
+    setSearchingNormal,
+    setSearchingSpecial,
+    setSearchingBase,
+  ],
+);
+
+// Kleiner Bestätigungsdialog, falls Details-Override überschrieben werden würde
+const askOverride = (current?: string | null, incoming?: string | null) =>
+  new Promise<boolean>((resolve) => {
+    if (current && current.trim() !== "" && incoming && incoming.trim() !== "") {
+      Modal.confirm({
+        title: "Details überschreiben?",
+        content:
+          "Für diese Position existiert bereits ein Details-Override. Möchtest du ihn durch die Einkaufsdetails aus der Extension ersetzen?",
+        okText: "Überschreiben",
+        cancelText: "Behalten",
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      });
+    } else {
+      resolve(true);
+    }
+  });
+
+// Auswahl-Handler: Normale Position – füllt Vorschlagsfelder im Modal
+const onSelectNormal = async (_: string, option: Option) => {
+  const full = option.full;
+  setSelectedFullNormal(full);
+
+  const current = formNormal.getFieldValue("details_override") as string | undefined;
+  const allow = await askOverride(current, full.purchase_details ?? undefined);
+
+  formNormal.setFieldsValue({
+    billbee_product_id: Number(option.value),
+    unit_price_net: full.net_purchase_price ?? undefined,
+    qty_ordered: formNormal.getFieldValue("qty_ordered") ?? 1,
+    internal_notes: formNormal.getFieldValue("internal_notes"),
+    details_override: allow ? full.purchase_details ?? undefined : current,
+  } as any);
+};
+
+// Auswahl-Handler: Sonder-Position – wählt SB-Produkt
+const onSelectSpecial = async (_: string, option: Option) => {
+  const full = option.full;
+  setSelectedFullSpecial(full);
+  formSpecial.setFieldsValue({
+    billbee_product_id: Number(option.value),
+  } as any);
+};
+
+// Auswahl-Handler: Grundmodell – übernimmt Ext. SKU, EK & Details als Vorschlag
+const onSelectBaseModel = async (_: string, option: Option) => {
+  const full = option.full;
+  setSelectedBaseModel(full);
+
+  const current = formSpecial.getFieldValue("details_override") as string | undefined;
+  const allow = await askOverride(current, full.purchase_details ?? undefined);
+
+  formSpecial.setFieldsValue({
+    base_model_billbee_product_id: Number(option.value),
+    supplier_sku: formSpecial.getFieldValue("supplier_sku") ?? full.external_sku ?? undefined,
+    unit_price_net: formSpecial.getFieldValue("unit_price_net") ?? full.net_purchase_price ?? undefined,
+    details_override: allow ? full.purchase_details ?? undefined : current,
+  } as any);
+};
+
 
   const hydrateProductCache = React.useCallback(
     async (ids: number[]) => {
@@ -329,6 +583,9 @@ export default function BestellungBearbeitenPage() {
     hydrateProductCache([...normalIds, ...specialIds]);
   }, [id, supabase, hydrateProductCache]);
 
+  // Merker für vorherigen Status (zurücksetzen bei Abbruch)
+  const [prevPoStatus, setPrevPoStatus] = React.useState<Po["status"] | undefined>(undefined);
+
   // Load
   React.useEffect(() => {
     (async () => {
@@ -345,6 +602,7 @@ export default function BestellungBearbeitenPage() {
       if (po) {
         form.setFieldsValue({
           ...po,
+          separate_invoice_for_shipping_cost: (po as any)?.separate_invoice_for_shipping_cost ?? undefined,
           ordered_at: toDate(po.ordered_at) as any,
           proforma_confirmed_at: toDate(po.proforma_confirmed_at) as any,
           sketch_confirmed_at: toDate(po.sketch_confirmed_at) as any,
@@ -353,6 +611,7 @@ export default function BestellungBearbeitenPage() {
           goods_received_at: toDate(po.goods_received_at) as any,
           invoice_date: toDate(po.invoice_date) as any,
         });
+        setPrevPoStatus(po.status);
       }
       setSuppliers(supp || []);
       if (supp && po?.supplier_id) {
@@ -369,18 +628,17 @@ export default function BestellungBearbeitenPage() {
     try {
       const v = await form.validateFields();
       setSaving(true);
+      // Nur Felder, die nicht statusrelevant sind, gehen direkt per Update
       const payload: PoUpdate = {
         supplier_id: v.supplier_id!,
-        status: v.status!, // DB-Enum (draft|ordered|confirmed)
-        ordered_at: fromDate(v.ordered_at as any)!,
-        proforma_confirmed_at: fromDate(v.proforma_confirmed_at as any),
-        sketch_confirmed_at: fromDate(v.sketch_confirmed_at as any),
-        dol_planned_at: fromDate(v.dol_planned_at as any),
-        dol_actual_at: fromDate(v.dol_actual_at as any),
-        goods_received_at: fromDate(v.goods_received_at as any),
+
         invoice_number: v.invoice_number ?? null,
         invoice_date: fromDate(v.invoice_date as any),
         shipping_cost_net: v.shipping_cost_net ?? 0,
+                separate_invoice_for_shipping_cost:
+          typeof v.separate_invoice_for_shipping_cost === "boolean"
+          ? v.separate_invoice_for_shipping_cost
+          : null,
         notes: v.notes ?? null,
       };
       const { error } = await supabase.from("app_purchase_orders").update(payload).eq("id", id);
@@ -394,422 +652,100 @@ export default function BestellungBearbeitenPage() {
     }
   };
 
-  // Suche in rpt_products_full (nach Manufacturer=Supplier)
-  const searchProducts = React.useCallback(
-    async (q: string, mode: "normal" | "special" | "base") => {
-      const supplierName = orderSupplierName?.trim();
-      if (!supplierName || !q || q.trim().length < 2) {
-        if (mode === "normal") setOptionsNormal([]);
-        if (mode === "special") setOptionsSpecial([]);
-        if (mode === "base") setOptionsBase([]);
-        return;
-      }
+  // Supplier-Leadtime (Tage) – optionales Feld in Supplier
+  const getSupplierLeadtimeDays = React.useCallback(() => {
+    const supId = form.getFieldValue("supplier_id") as string | undefined;
+    if (!supId) return 0;
+    const s = suppliers.find((x) => x.id === supId);
+    const dlt = (s as any)?.default_leadtime_days as number | null | undefined;
+    return Number.isFinite(dlt) ? (dlt as number) : 0;
+  }, [form, suppliers]);
 
-      if (mode === "normal") setSearchingNormal(true);
-      if (mode === "special") setSearchingSpecial(true);
-      if (mode === "base") setSearchingBase(true);
+  // ----------- Statuswechsel der Bestellung (RPC) -----------
+  const handlePoStatusChange = (next: Po["status"]) => {
+    const current = form.getFieldValue("status") as Po["status"] | undefined;
 
-      const { data, error } = await supabase
-        .from("rpt_products_full")
-        .select("id,sku,external_sku,name,manufacturer,purchase_details,net_purchase_price")
-        .ilike("manufacturer", supplierName)
-        .or(`external_sku.ilike.%${q}%,name.ilike.%${q}%,purchase_details.ilike.%${q}%`)
-        .limit(100);
+    // Wechsel auf "confirmed" → DOL-Dialog & RPC
+    if (next === "confirmed") {
+      const lead = getSupplierLeadtimeDays();
+      let picked: Dayjs | null = dayjs().add(lead, "day");
 
-      if (error) {
-        if (mode === "normal") setSearchingNormal(false);
-        if (mode === "special") setSearchingSpecial(false);
-        if (mode === "base") setSearchingBase(false);
-        return message.error(error.message);
-      }
+      Modal.confirm({
+        title: "Geplantes Verladedatum (DOL) festlegen",
+        content: (
+          <div>
+            <p className="mb-2">
+              Vorschlag: <b>{dayjs().add(lead, "day").format("DD.MM.YYYY")}</b> (heute + {lead} Tage Leadtime)
+            </p>
+            <DatePicker
+              className="w-full"
+              defaultValue={dayjs().add(lead, "day")}
+              onChange={(d) => (picked = d ?? null)}
+            />
+          </div>
+        ),
+        okText: "Übernehmen & bestätigen",
+        cancelText: "Abbrechen",
+        async onOk() {
+          const dateStr =
+            picked ? picked.format("YYYY-MM-DD") : dayjs().add(lead, "day").format("YYYY-MM-DD");
 
-      const filtered: ProductFull[] = (data ?? []).map((r: any) => ({
-        billbee_product_id: r.id,
-        sku: r.sku ?? null,
-        external_sku: r.external_sku ?? null,
-        name: r.name ?? null,
-        manufacturer: r.manufacturer ?? null,
-        purchase_details: r.purchase_details ?? null,
-        net_purchase_price: r.net_purchase_price ?? null,
-      }));
+          const { error } = await supabase.rpc("rpc_po_set_status", {
+            p_po_id: id,
+            p_next: "confirmed",
+            p_dol_planned: dateStr,
+          });
 
-      const opts: Option[] = filtered.map((r) => ({
-        value: String(r.billbee_product_id),
-        label: `${r.sku ?? "(ohne SKU)"} — ${r.external_sku ?? ""}`,
-        full: r,
-      }));
+          if (error) {
+            message.error(error.message);
+            form.setFieldsValue({ status: prevPoStatus ?? "ordered" });
+            return Promise.reject();
+          }
 
-      if (mode === "normal") {
-        setOptionsNormal(opts);
-        setSearchingNormal(false);
-      } else if (mode === "special") {
-        setOptionsSpecial(opts);
-        setSearchingSpecial(false);
-      } else {
-        setOptionsBase(opts);
-        setSearchingBase(false);
-      }
-    },
-    [orderSupplierName, supabase, message],
-  );
+          await refreshPositions();
+          setPrevPoStatus("confirmed");
+          form.setFieldsValue({ status: "confirmed", dol_planned_at: toDate(dateStr) as any });
+          message.success("Bestellung bestätigt & geplanter DOL gesetzt");
+          return Promise.resolve();
+        },
+        onCancel() {
+          form.setFieldsValue({ status: current ?? prevPoStatus ?? "ordered" });
+        },
+      });
 
-  // Override-Schutz
-  const askOverride = (current?: string | null, incoming?: string | null) =>
-    new Promise<boolean>((resolve) => {
-      if (current && current.trim() !== "" && incoming && incoming.trim() !== "") {
-        Modal.confirm({
-          title: "Details überschreiben?",
-          content:
-            "Für diese Position existiert bereits ein Details-Override. Möchtest du ihn durch die Einkaufsdetails aus der Extension ersetzen?",
-          okText: "Überschreiben",
-          cancelText: "Behalten",
-          onOk: () => resolve(true),
-          onCancel: () => resolve(false),
+      return;
+    }
+
+    // Sonstige Statuswechsel → RPC ohne DOL
+    Modal.confirm({
+      title: "Status ändern?",
+      content: `Status wird auf „${STATUS_OPTIONS.find((s) => s.value === next)?.label}“ gesetzt.`,
+      okText: "Übernehmen",
+      cancelText: "Abbrechen",
+      async onOk() {
+        const { error } = await supabase.rpc("rpc_po_set_status", {
+          p_po_id: id,
+          p_next: next,
+          p_dol_planned: null,
         });
-      } else {
-        resolve(true);
-      }
-    });
-
-  // Auswahl-Handler: Normal
-  const onSelectNormal = async (_: string, option: Option) => {
-    const full = option.full;
-    setSelectedFullNormal(full);
-
-    const current = formNormal.getFieldValue("details_override") as string | undefined;
-    const allow = await askOverride(current, full.purchase_details ?? undefined);
-
-    formNormal.setFieldsValue({
-      billbee_product_id: Number(option.value),
-      unit_price_net: full.net_purchase_price ?? undefined,
-      qty_ordered: formNormal.getFieldValue("qty_ordered") ?? 1,
-      internal_notes: formNormal.getFieldValue("internal_notes"),
-      details_override: allow ? full.purchase_details ?? undefined : current,
-    } as any);
-  };
-
-  // Auswahl-Handler: Sonder (SB-Produkt)
-  const onSelectSpecial = async (_: string, option: Option) => {
-    const full = option.full;
-    setSelectedFullSpecial(full);
-    formSpecial.setFieldsValue({
-      billbee_product_id: Number(option.value),
-    } as any);
-  };
-
-  // Auswahl-Handler: Grundmodell
-  const onSelectBaseModel = async (_: string, option: Option) => {
-    const full = option.full;
-    setSelectedBaseModel(full);
-
-    const current = formSpecial.getFieldValue("details_override") as string | undefined;
-    const allow = await askOverride(current, full.purchase_details ?? undefined);
-
-    formSpecial.setFieldsValue({
-      base_model_billbee_product_id: Number(option.value),
-      supplier_sku: formSpecial.getFieldValue("supplier_sku") ?? full.external_sku ?? undefined,
-      unit_price_net: formSpecial.getFieldValue("unit_price_net") ?? full.net_purchase_price ?? undefined,
-      details_override: allow ? full.purchase_details ?? undefined : current,
-    } as any);
-  };
-
-  // Submit
-  const submitNormal = async () => {
-    try {
-      const v = await formNormal.validateFields();
-      const insert: TablesInsert<"app_purchase_orders_positions_normal"> = {
-        order_id: id as string,
-        billbee_product_id: v.billbee_product_id!,
-        qty_ordered: v.qty_ordered ?? 1,
-        unit_price_net: v.unit_price_net ?? null,
-        internal_notes: v.internal_notes ?? null,
-      } as any;
-
-      const { data, error } = await supabase
-        .from("app_purchase_orders_positions_normal")
-        .insert(insert)
-        .select("*")
-        .single();
-      if (error) throw error;
-
-      await refreshPositions();
-      setOpenNormal(false);
-      setSelectedFullNormal(null);
-      formNormal.resetFields();
-      message.success("Position hinzugefügt");
-    } catch (e: any) {
-      if (e?.message) message.error(e.message);
-    }
-  };
-
-  const submitSpecial = async () => {
-    try {
-      const v = await formSpecial.validateFields();
-      if (!v.base_model_billbee_product_id) {
-        return message.error("Bitte ein Grundmodell auswählen.");
-      }
-
-      const insert: TablesInsert<"app_purchase_orders_positions_special"> = {
-        order_id: id as string,
-        billbee_product_id: v.billbee_product_id!, // SB-Produkt
-        base_model_billbee_product_id: v.base_model_billbee_product_id!,
-        supplier_sku: v.supplier_sku ?? null,
-        details_override: v.details_override ?? null,
-        order_confirmation_ref: v.order_confirmation_ref ?? null,
-        external_file_url: v.external_file_url ?? null,
-        qty_ordered: v.qty_ordered ?? 1,
-        unit_price_net: v.unit_price_net ?? null,
-        dol_actual_at: null,
-        sketch_needed: v.sketch_needed ?? true,
-      } as any;
-
-      const { error } = await supabase
-        .from("app_purchase_orders_positions_special")
-        .insert(insert);
-      if (error) throw error;
-
-      await refreshPositions();
-      setOpenSpecial(false);
-      setSelectedFullSpecial(null);
-      setSelectedBaseModel(null);
-      formSpecial.resetFields();
-      message.success("Sonder-Position hinzugefügt");
-    } catch (e: any) {
-      if (e?.message) message.error(e.message);
-    }
-  };
-
-  // Inline-Edit (Normal)
-  const startEdit = (r: PosNormal) => {
-    setEditingId(r.id);
-    setEditBuf({
-      qty_ordered: r.qty_ordered ?? 0,
-      unit_price_net: r.unit_price_net ?? null,
-      internal_notes: r.internal_notes ?? null,
+        if (error) {
+          message.error(error.message);
+          form.setFieldsValue({ status: current ?? prevPoStatus ?? "ordered" });
+          return Promise.reject();
+        }
+        setPrevPoStatus(next);
+        form.setFieldsValue({ status: next });
+        message.success("Status aktualisiert");
+        return Promise.resolve();
+      },
+      onCancel() {
+        form.setFieldsValue({ status: current ?? prevPoStatus ?? "ordered" });
+      },
     });
   };
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditBuf({ });
-  };
-  const saveEdit = async (row: PosNormal) => {
-    const qty = typeof editBuf.qty_ordered === "number" ? editBuf.qty_ordered : 0;
-    const price =
-      typeof editBuf.unit_price_net === "number" || editBuf.unit_price_net === null
-        ? editBuf.unit_price_net
-        : 0;
-
-    const payload: Partial<PosNormal> = {
-      qty_ordered: qty,
-      unit_price_net: price as number | 0.0,
-      internal_notes: (editBuf.internal_notes ?? "") === "" ? null : editBuf.internal_notes ?? null,
-    };
-
-    const { error } = await supabase
-      .from("app_purchase_orders_positions_normal")
-      .update(payload)
-      .eq("id", row.id);
-
-    if (error) {
-      message.error(error.message);
-      return;
-    }
-
-    await refreshPositions();
-    message.success("Position aktualisiert");
-    cancelEdit();
-  };
-
-  // Inline-Edit (Special)
-  const startEditSpecial = (r: PosSpecial) => {
-    setEditingSpecialId(r.id);
-    setEditBufSpecial({
-      qty_ordered: r.qty_ordered ?? 0,
-      unit_price_net: r.unit_price_net ?? null,
-      details_override: r.details_override ?? null,
-      supplier_sku: r.supplier_sku ?? null,
-      order_confirmation_ref: r.order_confirmation_ref ?? null,
-      external_file_url: r.external_file_url ?? null,
-    });
-  };
-  const cancelEditSpecial = () => {
-    setEditingSpecialId(null);
-    setEditBufSpecial({});
-  };
-  const saveEditSpecial = async (row: PosSpecial) => {
-    const payload: Partial<PosSpecial> = {
-      qty_ordered:
-        typeof editBufSpecial.qty_ordered === "number" ? editBufSpecial.qty_ordered : row.qty_ordered,
-      unit_price_net:
-        typeof editBufSpecial.unit_price_net === "number" || editBufSpecial.unit_price_net === null
-          ? (editBufSpecial.unit_price_net as number | 0.0)
-          : row.unit_price_net ?? null,
-      details_override:
-        (editBufSpecial.details_override ?? "") === ""
-          ? null
-          : (editBufSpecial.details_override as string | null),
-      supplier_sku:
-        (editBufSpecial.supplier_sku ?? "") === ""
-          ? null
-          : (editBufSpecial.supplier_sku as string | null),
-      order_confirmation_ref:
-        (editBufSpecial.order_confirmation_ref ?? "") === ""
-          ? null
-          : (editBufSpecial.order_confirmation_ref as string | null),
-      external_file_url:
-        (editBufSpecial.external_file_url ?? "") === ""
-          ? null
-          : (editBufSpecial.external_file_url as string | null),
-      sketch_needed:
-        typeof editBufSpecial?.qty_ordered !== "undefined"
-          ? undefined
-          : undefined,
-    };
-
-    const { error } = await supabase
-      .from("app_purchase_orders_positions_special")
-      .update(payload)
-      .eq("id", row.id);
-
-    if (error) {
-      message.error(error.message);
-      return;
-    }
-
-    await refreshPositions();
-    message.success("Sonder-Position aktualisiert");
-    cancelEditSpecial();
-  };
-
-  // -------- Status Drawer öffnen/füllen --------
-  const openStatusDrawer = (target: EditTarget) => {
-    setDrawerTarget(target);
-    if (!target) return;
-    const r = target.row as any;
-    drawerForm.setFieldsValue({
-      proforma_confirmed_at: toDate(r.proforma_confirmed_at ?? null) as any,
-      sketch_confirmed_at: toDate(r.sketch_confirmed_at ?? null) as any,
-      dol_planned_at: toDate(r.dol_planned_at ?? null) as any,
-      dol_actual_at: toDate(r.dol_actual_at ?? null) as any,
-      goods_received_at: toDate(r.goods_received_at ?? null) as any,
-    });
-    setDrawerOpen(true);
-  };
-
-  const saveStatusDrawer = async () => {
-    try {
-      const v = await drawerForm.validateFields();
-      const payload = {
-        proforma_confirmed_at: fromDate(v.proforma_confirmed_at ?? null),
-        sketch_confirmed_at: fromDate(v.sketch_confirmed_at ?? null),
-        dol_planned_at: fromDate(v.dol_planned_at ?? null),
-        dol_actual_at: fromDate(v.dol_actual_at ?? null),
-        goods_received_at: fromDate(v.goods_received_at ?? null),
-      } as any;
-
-      if (!drawerTarget) return;
-      if (drawerTarget.kind === "normal") {
-        const { error } = await supabase
-          .from("app_purchase_orders_positions_normal")
-          .update(payload)
-          .eq("id", (drawerTarget.row as PosNormal).id);
-        if (error) throw error;
-
-        await refreshPositions();
-      } else {
-        const { error } = await supabase
-          .from("app_purchase_orders_positions_special")
-          .update(payload)
-          .eq("id", (drawerTarget.row as PosSpecial).id);
-        if (error) throw error;
-
-        await refreshPositions();
-      }
-      message.success("Status aktualisiert");
-      setDrawerOpen(false);
-      setDrawerTarget(null);
-    } catch (e: any) {
-      if (e?.message) message.error(e.message);
-    }
-  };
-
-  // -------- Batch-Aktionen --------
-  const batchUpdatePositions = async (
-    kind: "normal" | "special",
-    ids: React.Key[],
-    payload: Partial<
-      Pick<PosNormal, "proforma_confirmed_at" | "dol_planned_at" | "dol_actual_at" | "goods_received_at">
-    >,
-  ) => {
-    if (!ids.length) {
-      message.info("Bitte Positionen auswählen.");
-      return;
-    }
-    const table = kind === "normal" ? "app_purchase_orders_positions_normal" : "app_purchase_orders_positions_special";
-    const { error } = await supabase.from(table).update(payload as any).in("id", ids as string[]);
-    if (error) {
-      message.error(error.message);
-      return;
-    }
-    await refreshPositions();
-    if (kind === "normal") setSelectedNormalKeys([]);
-    else setSelectedSpecialKeys([]);
-    message.success(`${ids.length} Position(en) aktualisiert`);
-  };
-
-const batchMenu = (kind: "normal" | "special") => {
-  const ids = kind === "normal" ? selectedNormalKeys : selectedSpecialKeys;
-
-  const setBatchStatus = async (next: ItemStatus) => {
-    if (!ids.length) {
-      message.info("Bitte Positionen auswählen.");
-      return;
-    }
-
-    const table =
-      kind === "normal"
-        ? "app_purchase_orders_positions_normal"
-        : "app_purchase_orders_positions_special";
-
-    const { error } = await supabase
-      .from(table)
-      .update({ po_item_status: next })
-      .in("id", ids as string[]);
-
-    if (error) {
-      message.error(error.message);
-      return;
-    }
-
-    await refreshPositions();
-    if (kind === "normal") setSelectedNormalKeys([]);
-    else setSelectedSpecialKeys([]);
-
-    message.success(
-      `${ids.length} Position(en) auf "${ITEM_STATUS_META[next].label}" gesetzt`
-    );
-  };
-
-  // Status-Auswahl (ohne "draft", damit keine Downgrades angeboten werden)
-  const statusChoices = (Object.keys(ITEM_STATUS_META) as ItemStatus[])
-    .filter((k) => k !== "draft")
-    .map((k) => ({
-      key: `status_${k}`,
-      label: ITEM_STATUS_META[k].label,
-      onClick: () => setBatchStatus(k),
-    }));
-
-  return { items: statusChoices };
-};
-
 
   // --------- Hilfs-Komponente: DOL (Einzel-Edit in Tabelle) ---------
   const DolCell: React.FC<{ row: PosNormal | PosSpecial }> = ({ row }) => {
-    const table =
-      "base_model_billbee_product_id" in row
-        ? "app_purchase_orders_positions_special"
-        : "app_purchase_orders_positions_normal";
-
     const value = (row as any).dol_actual_at as string | null | undefined;
 
     return (
@@ -818,142 +754,125 @@ const batchMenu = (kind: "normal" | "special") => {
           className="w-full"
           value={toDate(value ?? null) as any}
           onChange={async (d) => {
-            const payload = { dol_actual_at: fromDate(d ?? null) };
-            const { error } = await supabase.from(table).update(payload).eq("id", row.id);
+            const { error } = await supabase.rpc("rpc_po_set_dol_actual", {
+              p_item_id: row.id,
+              p_dol_actual: fromDate(d ?? null),
+            });
             if (error) return message.error(error.message);
             await refreshPositions();
             message.success("DOL aktualisiert");
           }}
         />
-          {/* Verzögerung berechnen und anzeigen */}
-  {row.dol_actual_at && row.dol_planned_at && dayjs(row.dol_actual_at).isAfter(dayjs(row.dol_planned_at)) && (
-    <Typography.Text type="danger">
-      {dayjs(row.dol_actual_at).diff(dayjs(row.dol_planned_at), "day")} Tage verzögert
-    </Typography.Text>
-  )}
+        {/* Verzögerung berechnen und anzeigen */}
+        {(row as any).dol_actual_at &&
+          (row as any).dol_planned_at &&
+          dayjs((row as any).dol_actual_at).isAfter(dayjs((row as any).dol_planned_at)) && (
+            <Typography.Text type="danger">
+              {dayjs((row as any).dol_actual_at).diff(dayjs((row as any).dol_planned_at), "day")} Tage verzögert
+            </Typography.Text>
+          )}
       </Space.Compact>
     );
   };
-  // Merker für vorherigen Status (zurücksetzen bei Abbruch)
-const [prevPoStatus, setPrevPoStatus] = React.useState<Po["status"] | undefined>(undefined);
 
-// beim Laden der PO (nach form.setFieldsValue(...))
-React.useEffect(() => {
-  const fetchPo = async () => {
-    const { data: po, error } = await supabase
-      .from("app_purchase_orders")
-      .select("status")
-      .eq("id", id)
-      .maybeSingle();
-    if (error) {
-      message.error(`Fehler beim Laden: ${error.message}`);
-      return;
-    }
-    if (po) setPrevPoStatus(po.status);
-  };
+  // -------- Batch-Menü (Status-Updates) --------
+  const batchMenu = (kind: "normal" | "special") => {
+    const ids = kind === "normal" ? selectedNormalKeys : selectedSpecialKeys;
 
-  fetchPo();
-}, [id, supabase, message]);
 
-// Helper: Supplier-Leadtime (Tage)
-const getSupplierLeadtimeDays = React.useCallback(() => {
-  const supId = form.getFieldValue("supplier_id") as string | undefined;
-  if (!supId) return 0;
-  const s = suppliers.find(x => x.id === supId);
-  // Feldname an dein Schema anpassen, falls anders benannt:
-  const dlt = (s as any)?.default_leadtime_days as number | null | undefined;
-  return Number.isFinite(dlt) ? (dlt as number) : 0;
-}, [form, suppliers]);
 
-// Handler für Statuswechsel mit Confirm-Dialog bei "confirmed"
-const handlePoStatusChange = (next: Po["status"]) => {
-  const current = form.getFieldValue("status") as Po["status"] | undefined;
 
-  // Wenn nicht auf confirmed → normal setzen + prevStatus updaten
-  if (next !== "confirmed") {
-    form.setFieldsValue({ status: next });
-    setPrevPoStatus(next);
-    return;
-  }
-
-  // Auf confirmed → Pflichtdialog für DOL geplant
-  const lead = getSupplierLeadtimeDays();
-  let picked: Dayjs | null = dayjs().add(lead, "day");
-
-  Modal.confirm({
-    title: "Geplantes Verladedatum (DOL) festlegen",
-    content: (
-      <div>
-        <p className="mb-2">
-          Vorschlag: <b>{dayjs().add(lead, "day").format("DD.MM.YYYY")}</b> (heute +{" "}
-          {lead} Tage Lieferanten-Leadtime)
-        </p>
-        <DatePicker
-          className="w-full"
-          defaultValue={dayjs().add(lead, "day")}
-          onChange={(d) => (picked = d ?? null)}
-        />
-      </div>
-    ),
-    okText: "Übernehmen & bestätigen",
-    cancelText: "Abbrechen",
-    async onOk() {
-      const dateStr = picked ? picked.format("YYYY-MM-DD") : dayjs().add(lead, "day").format("YYYY-MM-DD");
-      // 1) Formularwerte setzen (Status + Proforma)
-       const { error: ePo } = await supabase
-    .from("app_purchase_orders")
-    .update({
-      status: "confirmed",
-      proforma_confirmed_at: dateStr,
-    })
-    .eq("id", id);
-
-  if (ePo) {
-    message.error(ePo.message);
-    // UI zurück auf vorherigen Status
-    form.setFieldsValue({ status: prevPoStatus ?? "ordered" });
-    return Promise.reject();
-  }
-
-      // Normal
-      const { error: e1 } = await supabase
-        .from("app_purchase_orders_positions_normal")
-        .update({ dol_planned_at: dateStr, dol_actual_at: dateStr })
-        .eq("order_id", id)
-        .is("dol_planned_at", null);
-
-      if (e1) {
-        message.error(e1.message);
-        // Status zurückdrehen
-        form.setFieldsValue({ status: current ?? "ordered" });
-        return Promise.reject();
+    const setBatchStatus = async (next: ItemStatus) => {
+      if (!ids.length) {
+        message.info("Bitte Positionen auswählen.");
+        return;
       }
 
-      // Special
-      const { error: e2 } = await supabase
-        .from("app_purchase_orders_positions_special")
-        .update({ dol_planned_at: dateStr, dol_actual_at: dateStr })
-        .eq("order_id", id)
-        .is("dol_planned_at", null);
+      if (isBeforeConfirmed) {
+        message.info("Positionsstatus können erst ab Bestätigung geändert werden.");
+        return { items: [] };
+      }
 
-      if (e2) {
-        message.error(e2.message);
-        form.setFieldsValue({ status: current ?? "ordered" });
-        return Promise.reject();
+      if (next === "cancelled") {
+          Modal.confirm({
+            title: "Ausgewählte Positionen stornieren?",
+            content: "Achtung: Dieser Schritt kann nicht rückgängig gemacht werden.",
+            okText: "Ja, stornieren",
+            okButtonProps: { danger: true },
+            cancelText: "Abbrechen",
+            async onOk() {
+              await doBatch();
+            },
+          });
+          return;
+        }
+        await doBatch();
+
+        async function doBatch() {
+          const { data, error } = await supabase.rpc("rpc_po_bulk_item_status", {
+            p_po_id: id,
+            p_item_ids: ids as string[],
+            p_next: next,
+          });
+          if (error) {
+            message.error(error.message);
+            return;
+          }
+          await refreshPositions();
+          if (kind === "normal") setSelectedNormalKeys([]);
+          else setSelectedSpecialKeys([]);
+          const fails = (data?.fail as any[]) || [];
+          if (fails.length) {
+            message.warning(`${ids.length - fails.length} Position(en) aktualisiert, ${fails.length} mit Fehlern.`);
+          } else {
+            message.success(`${ids.length} Position(en) auf "${ITEM_STATUS_META[next].label}" gesetzt`);
+          }
+        }
+
+      const { data, error } = await supabase.rpc("rpc_po_bulk_item_status", {
+        p_po_id: id,
+        p_item_ids: ids as string[],
+        p_next: next,
+      });
+
+      if (error) {
+        message.error(error.message);
+        return;
       }
 
       await refreshPositions();
-      setPrevPoStatus("confirmed");
-      message.success("Bestellung bestätigt & DOL geplant gesetzt");
-      return Promise.resolve();
-    },
-    onCancel() {
-      // Auswahl zurück auf vorherigen Status
-      form.setFieldsValue({ status: current ?? prevPoStatus ?? "ordered" });
-    },
-  });
-};
+      if (kind === "normal") setSelectedNormalKeys([]);
+      else setSelectedSpecialKeys([]);
 
+      // Kleine Auswertung: falls es Fehlschläge gibt
+      const fails = (data?.fail as any[]) || [];
+      if (fails.length) {
+        message.warning(`${ids.length - fails.length} Position(en) aktualisiert, ${fails.length} mit Fehlern.`);
+      } else {
+        message.success(`${ids.length} Position(en) auf "${ITEM_STATUS_META[next].label}" gesetzt`);
+      }
+    };
+
+    const statusChoices = (Object.keys(ITEM_STATUS_META) as ItemStatus[])
+      .filter((k) => k !== "draft")
+      .map((k) => ({
+        key: `status_${k}`,
+        label: ITEM_STATUS_META[k].label,
+        onClick: () => setBatchStatus(k),
+      }));
+
+    return { items: statusChoices };
+  };
+
+  const s = form.getFieldValue("status") as Po["status"] | undefined;
+  // -------- UI: Statusabhängige Sperren --------
+  const isConfirmedOrBeyond = (() => {
+    return !!s && ["confirmed", "partially_in_production", "in_production", "partially_delivered", "delivered"].includes(s);
+  })();
+
+  const isBeforeConfirmed = !!s && (s === "draft" || s === "ordered");
+
+  
 
   // ------- Tabellen-Definitionen -------
   const columnsNormal = [
@@ -1023,7 +942,11 @@ const handlePoStatusChange = (next: Po["status"]) => {
       width: 140,
       render: (_: any, r: PosNormal) => {
         const qty =
-          editingId === r.id ? (typeof editBuf.qty_ordered === "number" ? editBuf.qty_ordered : 0) : (r.qty_ordered as number);
+          editingId === r.id
+            ? typeof editBuf.qty_ordered === "number"
+              ? editBuf.qty_ordered
+              : 0
+            : (r.qty_ordered as number);
         const price =
           editingId === r.id
             ? typeof editBuf.unit_price_net === "number"
@@ -1033,9 +956,35 @@ const handlePoStatusChange = (next: Po["status"]) => {
         return <Text>{(qty * (price || 0)).toFixed(2)}</Text>;
       },
     },
+   {
+  title: "Versand anteilig",
+  width: 140,
+  render: (_: any, r: PosNormal) => {
+    const ship = Number((r as any).shipping_costs_proportional ?? 0);
+    return <Text>{formatEUR(ship)}</Text>;
+  },
+},
+{
+  // Optional: Anschaffungskosten pro Position (Summe + anteiliger Versand)
+  title: "Anschaffung (netto)",
+  width: 160,
+  render: (_: any, r: PosNormal) => {
+    const qty = Number(r.qty_ordered ?? 0);
+    const unit = Number(r.unit_price_net ?? 0);
+    const line = qty * unit;
+    const ship = Number((r as any).shipping_costs_proportional ?? 0);
+    const acq = line + ship;
+    return (
+      <Tooltip title={`Zeile: ${formatEUR(line)} + Versand: ${formatEUR(ship)}`}>
+        <Text strong>{formatEUR(acq)}</Text>
+      </Tooltip>
+    );
+  },
+},
+
     {
       title: "Verladung erwartet (DoL)",
-      width: 200,
+      width: 240,
       render: (_: any, r: PosNormal) => <DolCell row={r} />,
     },
     {
@@ -1044,31 +993,54 @@ const handlePoStatusChange = (next: Po["status"]) => {
       render: (_: any, r: PosNormal) => {
         const s = (r.po_item_status as ItemStatus) || effectiveItemStatus(r);
         const meta = ITEM_STATUS_META[s];
-        const updateStatus = async (next: ItemStatus) => {
-  const { error } = await supabase
-    .from("app_purchase_orders_positions_normal")
-    .update({ po_item_status: next })
-    .eq("id", r.id);
-  if (error) return message.error(error.message);
-  await refreshPositions();
-  message.success("Status aktualisiert");
-};
+        const confirmAndUpdateStatus = async (next: ItemStatus) => {
+          if (next === "cancelled") {
+            Modal.confirm({
+              title: "Position stornieren?",
+              content: "Achtung: Dieser Schritt kann nicht rückgängig gemacht werden.",
+              okText: "Ja, stornieren",
+              okButtonProps: { danger: true },
+              cancelText: "Abbrechen",
+              async onOk() {
+                const { error } = await supabase.rpc("rpc_po_item_set_status", {
+                  p_item_id: r.id,
+                  p_next: next,
+                });
+                if (error) return message.error(error.message);
+                await refreshPositions();
+                message.success("Position storniert");
+              },
+            });
+            return;
+          }
+
+          const { error } = await supabase.rpc("rpc_po_item_set_status", {
+            p_item_id: r.id,
+            p_next: next,
+          });
+          if (error) return message.error(error.message);
+          await refreshPositions();
+          message.success("Status aktualisiert");
+        };
+
 
         return (
           <Dropdown
             trigger={["click"]}
+            disabled={isBeforeConfirmed} // NEU: vor Bestätigung gesperrt
             menu={{
               items: (Object.keys(ITEM_STATUS_META) as ItemStatus[]).map((k) => ({
                 key: k,
                 label: ITEM_STATUS_META[k].label,
-                onClick: () => updateStatus(k),
+                onClick: () => confirmAndUpdateStatus(k), // siehe unten
               })),
             }}
           >
-            <Tag color={meta.color} style={{ cursor: "pointer" }}>
+            <Tag color={meta.color} style={{ cursor: isBeforeConfirmed ? "not-allowed" : "pointer" }}>
               {meta.icon} {meta.label}
             </Tag>
           </Dropdown>
+
         );
       },
     },
@@ -1102,14 +1074,18 @@ const handlePoStatusChange = (next: Po["status"]) => {
           </Space>
         ) : (
           <Space size="small">
-            <Button size="small" onClick={() => startEdit(r)}>
+            <Button size="small" onClick={() => startEdit(r)} disabled={isConfirmedOrBeyond}>
               <EditOutlined />
             </Button>
             <Button
               danger
               size="small"
+              disabled={isConfirmedOrBeyond}
               onClick={async () => {
-                const { error } = await supabase.from("app_purchase_orders_positions_normal").delete().eq("id", r.id);
+                const { error } = await supabase
+                  .from("app_purchase_orders_positions_normal")
+                  .delete()
+                  .eq("id", r.id);
                 if (error) return message.error(error.message);
                 await refreshPositions();
                 message.success("Gelöscht");
@@ -1172,7 +1148,7 @@ const handlePoStatusChange = (next: Po["status"]) => {
     },
     {
       title: "Skizze",
-      width: 200,
+      width: 220,
       render: (_: any, r: PosSpecial) => (
         <ConfirmSketchButton
           position={{
@@ -1206,7 +1182,8 @@ const handlePoStatusChange = (next: Po["status"]) => {
       width: 140,
       render: (_: any, r: PosSpecial) => {
         const base = productCache[Number(r.base_model_billbee_product_id!)];
-        const effectivePrice = typeof r.unit_price_net === "number" ? r.unit_price_net : base?.net_purchase_price ?? 0;
+        const effectivePrice =
+          typeof r.unit_price_net === "number" ? r.unit_price_net : base?.net_purchase_price ?? 0;
         return editingSpecialId === r.id ? (
           <InputNumber
             value={
@@ -1217,7 +1194,10 @@ const handlePoStatusChange = (next: Po["status"]) => {
                 : r.unit_price_net ?? base?.net_purchase_price ?? null
             }
             onChange={(v) =>
-              setEditBufSpecial((s) => ({ ...s, unit_price_net: v === null || v === undefined ? null : Number(v) }))
+              setEditBufSpecial((s) => ({
+                ...s,
+                unit_price_net: v === null || v === undefined ? null : Number(v),
+              }))
             }
             min={0}
             step={0.01}
@@ -1253,8 +1233,34 @@ const handlePoStatusChange = (next: Po["status"]) => {
       },
     },
     {
+  title: "Versand anteilig",
+  width: 140,
+  render: (_: any, r: PosNormal) => {
+    const ship = Number((r as any).shipping_costs_proportional ?? 0);
+    return <Text>{formatEUR(ship)}</Text>;
+  },
+},
+{
+  // Optional: Anschaffungskosten pro Position (Summe + anteiliger Versand)
+  title: "Anschaffung (netto)",
+  width: 160,
+  render: (_: any, r: PosNormal) => {
+    const qty = Number(r.qty_ordered ?? 0);
+    const unit = Number(r.unit_price_net ?? 0);
+    const line = qty * unit;
+    const ship = Number((r as any).shipping_costs_proportional ?? 0);
+    const acq = line + ship;
+    return (
+      <Tooltip title={`Zeile: ${formatEUR(line)} + Versand: ${formatEUR(ship)}`}>
+        <Text strong>{formatEUR(acq)}</Text>
+      </Tooltip>
+    );
+  },
+},
+
+    {
       title: "Verladung erwartet (DoL)",
-      width: 200,
+      width: 240,
       render: (_: any, r: PosSpecial) => <DolCell row={r} />,
     },
     {
@@ -1263,37 +1269,60 @@ const handlePoStatusChange = (next: Po["status"]) => {
       render: (_: any, r: PosSpecial) => {
         const s = (r.po_item_status as ItemStatus) || effectiveItemStatus(r);
         const meta = ITEM_STATUS_META[s];
-        const updateStatus = async (next: ItemStatus) => {
-  const { error } = await supabase
-    .from("app_purchase_orders_positions_special")
-    .update({ po_item_status: next })
-    .eq("id", r.id);
-  if (error) return message.error(error.message);
-  await refreshPositions();
-  message.success("Status aktualisiert");
-};
+        const confirmAndUpdateStatus = async (next: ItemStatus) => {
+          if (next === "cancelled") {
+            Modal.confirm({
+              title: "Position stornieren?",
+              content: "Achtung: Dieser Schritt kann nicht rückgängig gemacht werden.",
+              okText: "Ja, stornieren",
+              okButtonProps: { danger: true },
+              cancelText: "Abbrechen",
+              async onOk() {
+                const { error } = await supabase.rpc("rpc_po_item_set_status", {
+                  p_item_id: r.id,
+                  p_next: next,
+                });
+                if (error) return message.error(error.message);
+                await refreshPositions();
+                message.success("Position storniert");
+              },
+            });
+            return;
+          }
+
+          const { error } = await supabase.rpc("rpc_po_item_set_status", {
+            p_item_id: r.id,
+            p_next: next,
+          });
+          if (error) return message.error(error.message);
+          await refreshPositions();
+          message.success("Status aktualisiert");
+        };
+
 
         return (
-          <Dropdown
-            trigger={["click"]}
-            menu={{
-              items: (Object.keys(ITEM_STATUS_META) as ItemStatus[]).map((k) => ({
-                key: k,
-                label: ITEM_STATUS_META[k].label,
-                onClick: () => updateStatus(k),
-              })),
-            }}
-          >
-            <Tag color={meta.color} style={{ cursor: "pointer" }}>
-              {meta.icon} {meta.label}
-            </Tag>
-          </Dropdown>
+      <Dropdown
+        trigger={["click"]}
+        disabled={isBeforeConfirmed} // NEU: vor Bestätigung gesperrt
+        menu={{
+          items: (Object.keys(ITEM_STATUS_META) as ItemStatus[]).map((k) => ({
+            key: k,
+            label: ITEM_STATUS_META[k].label,
+            onClick: () => confirmAndUpdateStatus(k), // siehe unten
+          })),
+        }}
+      >
+  <Tag color={meta.color} style={{ cursor: isBeforeConfirmed ? "not-allowed" : "pointer" }}>
+    {meta.icon} {meta.label}
+  </Tag>
+</Dropdown>
+
         );
       },
     },
     {
       title: "Dokumente",
-      width: 120,
+      width: 140,
       render: (_: any, r: PosSpecial) =>
         editingSpecialId === r.id ? (
           <Input
@@ -1304,7 +1333,13 @@ const handlePoStatusChange = (next: Po["status"]) => {
         ) : r.external_file_url ? (
           <Space>
             <Tooltip title="Planungsdokumente öffnen">
-              <Button size="small" type="default" icon={<FileTextOutlined />} href={r.external_file_url as string} target="_blank" />
+              <Button
+                size="small"
+                type="default"
+                icon={<FileTextOutlined />}
+                href={r.external_file_url as string}
+                target="_blank"
+              />
             </Tooltip>
           </Space>
         ) : (
@@ -1314,7 +1349,8 @@ const handlePoStatusChange = (next: Po["status"]) => {
     {
       title: "AB-Ref",
       width: 160,
-      render: (_: any, r: PosSpecial) => cellEllipsis(r.order_confirmation_ref ?? "—", r.order_confirmation_ref ?? "—"),
+      render: (_: any, r: PosSpecial) =>
+        cellEllipsis(r.order_confirmation_ref ?? "—", r.order_confirmation_ref ?? "—"),
     },
     {
       title: "Aktionen",
@@ -1323,7 +1359,7 @@ const handlePoStatusChange = (next: Po["status"]) => {
       render: (_: any, r: PosSpecial) =>
         editingSpecialId === r.id ? (
           <Space direction="vertical" size="small" style={{ width: "100%" }}>
-            <Button type="primary" size="small" block onClick={() => saveEditSpecial(r)}>
+            <Button type="primary" size="small" block onClick={() => saveEditSpecial(r)} disabled={isConfirmedOrBeyond}>
               Speichern
             </Button>
             <Button size="small" block onClick={cancelEditSpecial}>
@@ -1332,14 +1368,18 @@ const handlePoStatusChange = (next: Po["status"]) => {
           </Space>
         ) : (
           <Space size="small">
-            <Button size="small" onClick={() => startEditSpecial(r)}>
+            <Button size="small" onClick={() => startEditSpecial(r)} disabled={isConfirmedOrBeyond}>
               <EditOutlined />
             </Button>
             <Button
               danger
               size="small"
+              disabled={isConfirmedOrBeyond}
               onClick={async () => {
-                const { error } = await supabase.from("app_purchase_orders_positions_special").delete().eq("id", r.id);
+                const { error } = await supabase
+                  .from("app_purchase_orders_positions_special")
+                  .delete()
+                  .eq("id", r.id);
                 if (error) return message.error(error.message);
                 await refreshPositions();
                 message.success("Gelöscht");
@@ -1352,6 +1392,104 @@ const handlePoStatusChange = (next: Po["status"]) => {
     },
   ];
 
+  // ----- Inline-Edit (Normal)
+  const startEdit = (r: PosNormal) => {
+    setEditingId(r.id);
+    setEditBuf({
+      qty_ordered: r.qty_ordered ?? 0,
+      unit_price_net: r.unit_price_net ?? null,
+      internal_notes: r.internal_notes ?? null,
+    });
+  };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditBuf({});
+  };
+  const saveEdit = async (row: PosNormal) => {
+    const qty = typeof editBuf.qty_ordered === "number" ? editBuf.qty_ordered : 0;
+    const price =
+      typeof editBuf.unit_price_net === "number" || editBuf.unit_price_net === null
+        ? editBuf.unit_price_net
+        : 0;
+
+    const payload: Partial<PosNormal> = {
+      qty_ordered: qty,
+      unit_price_net: (price as number) ?? 0.0,
+      internal_notes: (editBuf.internal_notes ?? "") === "" ? null : editBuf.internal_notes ?? null,
+    };
+
+    const { error } = await supabase
+      .from("app_purchase_orders_positions_normal")
+      .update(payload)
+      .eq("id", row.id);
+
+    if (error) {
+      message.error(`${error.message} (Fehlerdetails für Dev)`);
+      return;
+    }
+
+    await refreshPositions();
+    message.success("Position aktualisiert");
+    cancelEdit();
+  };
+
+  // ----- Inline-Edit (Special)
+  const startEditSpecial = (r: PosSpecial) => {
+    setEditingSpecialId(r.id);
+    setEditBufSpecial({
+      qty_ordered: r.qty_ordered ?? 0,
+      unit_price_net: r.unit_price_net ?? null,
+      details_override: r.details_override ?? null,
+      supplier_sku: r.supplier_sku ?? null,
+      order_confirmation_ref: r.order_confirmation_ref ?? null,
+      external_file_url: r.external_file_url ?? null,
+    });
+  };
+  const cancelEditSpecial = () => {
+    setEditingSpecialId(null);
+    setEditBufSpecial({});
+  };
+  const saveEditSpecial = async (row: PosSpecial) => {
+    const payload: Partial<PosSpecial> = {
+      qty_ordered:
+        typeof editBufSpecial.qty_ordered === "number" ? editBufSpecial.qty_ordered : row.qty_ordered,
+      unit_price_net:
+        typeof editBufSpecial.unit_price_net === "number" || editBufSpecial.unit_price_net === null
+          ? (editBufSpecial.unit_price_net as number | 0.0)
+          : row.unit_price_net ?? null,
+      details_override:
+        (editBufSpecial.details_override ?? "") === ""
+          ? null
+          : (editBufSpecial.details_override as string | null),
+      supplier_sku:
+        (editBufSpecial.supplier_sku ?? "") === ""
+          ? null
+          : (editBufSpecial.supplier_sku as string | null),
+      order_confirmation_ref:
+        (editBufSpecial.order_confirmation_ref ?? "") === ""
+          ? null
+          : (editBufSpecial.order_confirmation_ref as string | null),
+      external_file_url:
+        (editBufSpecial.external_file_url ?? "") === ""
+          ? null
+          : (editBufSpecial.external_file_url as string | null),
+    };
+
+    const { error } = await supabase
+      .from("app_purchase_orders_positions_special")
+      .update(payload)
+      .eq("id", row.id);
+
+    if (error) {
+      message.error(`${error.message} (Fehlerdetails für Dev)`);
+      return;
+    }
+
+    await refreshPositions();
+    message.success("Sonder-Position aktualisiert");
+    cancelEditSpecial();
+  };
+
   return (
     <App>
       <div className="p-4">
@@ -1359,7 +1497,10 @@ const handlePoStatusChange = (next: Po["status"]) => {
           <Col>
             <h2 className="text-xl font-semibold">Bestellung bearbeiten</h2>
           </Col>
-        </Row>
+          <Col>
+            <Button onClick={() => router.push("/einkauf/bestellungen")}>zur Übersicht</Button>
+          </Col>
+        </Row>        
 
         <Tabs
           defaultActiveKey="main"
@@ -1370,6 +1511,28 @@ const handlePoStatusChange = (next: Po["status"]) => {
               children: (
                 <Card loading={loading}>
                   <Form form={form} layout="vertical">
+
+                    {/* --- Prozess-Schritte (statt DatePickers) --- */}
+                    <Row className="mb-3">
+                      <Col span={24}>
+                        <Steps
+                          current={statusToStepIndex(form.getFieldValue("status"))}
+                          items={[
+                            { title: "Entwurf" },
+                            { title: "Bestellt" },
+                            { title: "Bestätigt" },
+                            { title: "Geliefert" },
+                          ]}
+                        />
+                        {form.getFieldValue("status") === "cancelled" && (
+                          <div style={{ marginTop: 8 }}>
+                            <Tag color="red">Storniert</Tag>
+                          </div>
+                        )}
+                      </Col>
+                    </Row>
+                    <Divider />
+                    {/* --- Kopfzeile --- */}
                     <Row gutter={12}>
                       <Col xs={24} md={8}>
                         <Form.Item label="Bestellnummer" name="order_number">
@@ -1389,6 +1552,14 @@ const handlePoStatusChange = (next: Po["status"]) => {
                             onChange={(val: string) => {
                               const s = suppliers.find((x) => x.id === val);
                               setOrderSupplierName(s?.name ?? null);
+
+                              const current = form.getFieldValue("separate_invoice_for_shipping_cost");
+                              if (current === undefined || current === null) {
+                                const supDefault = (s as any)?.separate_invoice_for_shipping_cost;
+                                if (typeof supDefault === "boolean") {
+                                  form.setFieldsValue({ separate_invoice_for_shipping_cost: supDefault });
+                                }
+                              }
                             }}
                           />
                         </Form.Item>
@@ -1399,46 +1570,17 @@ const handlePoStatusChange = (next: Po["status"]) => {
                           name="status"
                           rules={[{ required: true, message: "Pflichtfeld" }]}
                         >
-                          <Select
-                            options={STATUS_OPTIONS as any}   // oder PO_STATUS_OPTIONS, falls du die erweiterte Liste nutzt
-                            onChange={handlePoStatusChange}
-                          />
+                          <Select options={STATUS_OPTIONS as any} onChange={handlePoStatusChange} />
                         </Form.Item>
                       </Col>
                     </Row>
 
-                    <Row gutter={12}>
-                      <Col xs={24} md={6}>
-                        <Form.Item label="Bestellt am" name="ordered_at" rules={[{ required: true }]}>
-                          <DatePicker className="w-full" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={24} md={6}>
-                        <Form.Item label="Proforma bestätigt" name="proforma_confirmed_at">
-                          <DatePicker className="w-full" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={24} md={6}>
-                        <Form.Item label="Skizze bestätigt" name="sketch_confirmed_at">
-                          <DatePicker className="w-full" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={24} md={6}>
-                        <Form.Item label="Lieferung geplant" name="dol_planned_at">
-                          <DatePicker className="w-full" />
-                        </Form.Item>
-                      </Col>
-                    </Row>
 
+                    {/* --- Rechnungsdaten / Versandkosten / Notizen (eine Reihe nach oben geschoben) --- */}
                     <Row gutter={12}>
                       <Col xs={24} md={6}>
-                        <Form.Item label="Verladung erwartet (DOL)" name="dol_actual_at">
-                          <DatePicker className="w-full" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={24} md={6}>
-                        <Form.Item label="Wareneingang" name="goods_received_at">
-                          <DatePicker className="w-full" />
+                        <Form.Item label="Rechnungsnr." name="invoice_number">
+                          <Input />
                         </Form.Item>
                       </Col>
                       <Col xs={24} md={6}>
@@ -1447,25 +1589,31 @@ const handlePoStatusChange = (next: Po["status"]) => {
                         </Form.Item>
                       </Col>
                       <Col xs={24} md={6}>
-                        <Form.Item label="Rechnungsnr." name="invoice_number">
-                          <Input />
+                        <Form.Item label="Versandkosten (netto)" name="shipping_cost_net">
+                          <InputNumber className="w-full" min={0} step={0.01} />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={24} md={6}>
+                        <Form.Item
+                          label="Versandkosten separat abrechnen?"
+                          name="separate_invoice_for_shipping_cost"
+                          valuePropName="checked"
+                        >
+                          <Switch />
                         </Form.Item>
                       </Col>
                     </Row>
 
                     <Row gutter={12}>
-                      <Col xs={24} md={6}>
-                        <Form.Item label="Versandkosten (netto)" name="shipping_cost_net">
-                          <InputNumber className="w-full" min={0} step={0.01} />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={24} md={18}>
-                        <Form.Item label="Notizen" name="notes">
+                      <Col xs={24} md={24}>
+                        <Form.Item label="Anmerkungen" name="notes">
                           <Input.TextArea rows={3} />
                         </Form.Item>
                       </Col>
                     </Row>
-
+                    
+                    {/* --- Fuß: Speichern / Zurück --- */}
+                    <div style={{ marginTop: 16 }} />
                     <Row justify="end">
                       <Space>
                         <Button onClick={() => router.back()}>Zurück</Button>
@@ -1474,9 +1622,143 @@ const handlePoStatusChange = (next: Po["status"]) => {
                         </Button>
                       </Space>
                     </Row>
+                    <Divider />
+
+                    {/* --- Auswertung --- */}
+                    <Row gutter={[12, 12]}>
+                      {/* Linke Spalte: Beträge & Aufschlüsselung */}
+                      <Col>
+                        <Card size="small" title="Rechnungs-/Kostenübersicht">
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", rowGap: 6 }}>
+                            <Col>
+                              <Row>
+                                <Text>Summe Positionen</Text>
+                              </Row>
+                              <Row>
+                              <Text>
+                                + Versandkosten <Text type="secondary">(auf Rechnung)</Text>
+                              </Text>
+                              </Row>
+                              <Row>
+                              <Divider style={{ margin: "8px 0" }} />
+
+                              <Text strong>Rechnungssumme</Text>
+                              </Row>
+                              <Row>
+                              <Text>
+                                + Anschaffungsnebenkosten{" "}
+                                <Text type="secondary">(Versandkosten bei separater Rechnung)</Text>
+                              </Text>
+                              </Row>
+                              <Row>
+                              <Divider style={{ margin: "8px 0" }} />
+
+                              <Text strong>Anschaffungskosten</Text>
+                              </Row>
+                            </Col>
+                            <Col>
+                              <Row>
+                                <Text strong>{formatEUR(sumPositions)}</Text>
+                              </Row>
+                              <Row>
+                              <Text strong>{formatEUR(shippingOnInvoice)}</Text>
+                              </Row>
+                              <Row>
+                              <Divider style={{ margin: "8px 0" }} />
+                              <Text strong>{formatEUR(invoiceSum)}</Text>
+                              </Row>
+                              <Row>
+                              <Text strong>{formatEUR(ancillaryCosts)}</Text>
+                              </Row>
+                              <Row>
+                              <Divider style={{ margin: "8px 0" }} />
+                              <Text strong>{formatEUR(acquisitionCost)}</Text>
+                              </Row>
+                            </Col>
+                          </div>
+                        </Card>
+
+                        <Card size="small" title="Fortschritt">
+                          <Row gutter={[16, 16]} justify="start">
+                            <Col>
+                              <div style={{ textAlign: "center" }}>
+                                <Progress
+                                  type="circle"
+                                  percent={deliveredPercent}
+                                  status={deliveredActiveTotal === totalActivePositions && totalActivePositions > 0 ? "success" : "active"}
+                                />
+                                <div style={{ marginTop: 8 }}>
+                                  <Text>
+                                    Geliefert:&nbsp;
+                                    <strong>
+                                      {deliveredActiveTotal}/{totalActivePositions}
+                                    </strong>
+                                  </Text>
+                                </div>
+                              </div>
+                            </Col>
+
+                            <Col>
+                                <div style={{ textAlign: "center" }}>
+                                <Progress
+                                  type="circle"
+                                  percent={sketchPercent}
+                                  status={sketchConfirmed === sketchRequired ? "success" : "active"}
+                                />
+                                <div style={{ marginTop: 8 }}>
+                                  <Text>
+                                    Skizzen bestätigt:&nbsp;
+                                    <strong>
+                                      {sketchConfirmed}/{sketchRequired}
+                                    </strong>
+                                  </Text>
+                                </div>
+                              </div>
+
+                            </Col>
+                          </Row>
+
+                          {(pausedTotal > 0 || cancelledTotal > 0) && (
+                            <div style={{ marginTop: 12 }}>
+                              <Alert
+                                type="info"
+                                showIcon
+                                message={
+                                  <span>
+                                    <Text strong>Hinweis:</Text>&nbsp;Pausierte/Stornierte Positionen werden in den Fortschrittsanzeigen
+                                    <Text strong> nicht</Text> berücksichtigt.
+                                  </span>
+                                }
+                                description={
+                                  <Space size="small" wrap>
+                                    {pausedTotal > 0 && <Tag>{pausedTotal}× pausiert</Tag>}
+                                    {cancelledTotal > 0 && <Tag color="red">{cancelledTotal}× storniert</Tag>}
+                                  </Space>
+                                }
+                              />
+                            </div>
+                          )}
+                        </Card>
+
+                      </Col>
+
+                      {/* Verspätungs-Hinweis */}
+                      {hasDelay && (
+                        <Col span={24}>
+                          <Alert
+                            type="warning"
+                            message={`Verspätung: ${delayDays} Tage (geplant: ${dolPlanned!.format(
+                              "DD.MM.YYYY",
+                            )}, tatsächlich: ${dolActual!.format("DD.MM.YYYY")})`}
+                            showIcon
+                          />
+                        </Col>
+                      )}
+                    </Row>
                   </Form>
                 </Card>
-              ),
+              )
+
             },
             {
               key: "pos",
@@ -1485,18 +1767,16 @@ const handlePoStatusChange = (next: Po["status"]) => {
                 <div>
                   {/* Normale Positionen */}
                   <Card
-                    title={
-                      <Space>
-                        <span>Normale Positionen</span>
-                      </Space>
-                    }
+                    title={<Space><span>Normale Positionen</span></Space>}
                     className="mb-4"
                     extra={
                       <Space>
                         <Dropdown menu={batchMenu("normal")} trigger={["click"]}>
                           <Button size="small">Batch</Button>
                         </Dropdown>
-                        <Button onClick={() => setOpenNormal(true)}>+ Hinzufügen</Button>
+                        <Button onClick={() => setOpenNormal(true)} disabled={isConfirmedOrBeyond}>
+                          + Hinzufügen
+                        </Button>
                       </Space>
                     }
                   >
@@ -1504,7 +1784,13 @@ const handlePoStatusChange = (next: Po["status"]) => {
                       rowKey="id"
                       size="small"
                       dataSource={posNormal as any}
-                      pagination={false}
+                      pagination={{
+                        current: pageNormal,
+                        pageSize,
+                        total: posNormal.length,
+                        showSizeChanger: false,
+                        onChange: (p) => setPageNormal(p),
+                      }}
                       columns={columnsNormal as any}
                       tableLayout="fixed"
                       scroll={{ x: 1400 }}
@@ -1524,7 +1810,9 @@ const handlePoStatusChange = (next: Po["status"]) => {
                         <Dropdown menu={batchMenu("special")} trigger={["click"]}>
                           <Button size="small">Batch</Button>
                         </Dropdown>
-                        <Button onClick={() => setOpenSpecial(true)}>+ Hinzufügen</Button>
+                        <Button onClick={() => setOpenSpecial(true)} disabled={isConfirmedOrBeyond}>
+                          + Hinzufügen
+                        </Button>
                       </Space>
                     }
                   >
@@ -1532,7 +1820,13 @@ const handlePoStatusChange = (next: Po["status"]) => {
                       rowKey="id"
                       size="small"
                       dataSource={posSpecial as any}
-                      pagination={false}
+                      pagination={{
+                        current: pageSpecial,
+                        pageSize,
+                        total: posSpecial.length,
+                        showSizeChanger: false,
+                        onChange: (p) => setPageSpecial(p),
+                      }}
                       columns={columnsSpecial as any}
                       tableLayout="fixed"
                       scroll={{ x: 1500 }}
@@ -1558,7 +1852,26 @@ const handlePoStatusChange = (next: Po["status"]) => {
             setSelectedFullNormal(null);
             formNormal.resetFields();
           }}
-          onOk={submitNormal}
+          onOk={async () => {
+            try {
+              const v = await formNormal.validateFields();
+              const { error } = await supabase.rpc("rpc_po_add_item_normal", {
+                p_po_id: id,
+                p_product_id: v.billbee_product_id!,
+                p_qty: v.qty_ordered ?? 1,
+                p_unit_price: v.unit_price_net ?? 0,
+                p_notes: v.internal_notes ?? null,
+              });
+              if (error) throw error;
+              await refreshPositions();
+              setOpenNormal(false);
+              setSelectedFullNormal(null);
+              formNormal.resetFields();
+              message.success("Position hinzugefügt");
+            } catch (e: any) {
+              message.error(e?.message ?? "Fehler beim Hinzufügen.");
+            }
+          }}
           okText="Hinzufügen"
           cancelText="Abbrechen"
         >
@@ -1621,7 +1934,37 @@ const handlePoStatusChange = (next: Po["status"]) => {
             setSelectedBaseModel(null);
             formSpecial.resetFields();
           }}
-          onOk={submitSpecial}
+          onOk={async () => {
+            try {
+              const v = await formSpecial.validateFields();
+              if (!v.base_model_billbee_product_id) {
+                return message.error("Bitte ein Grundmodell auswählen.");
+              }
+
+              const { error } = await supabase.rpc("rpc_po_add_item_special", {
+                p_po_id: id,
+                p_sb_product_id: v.billbee_product_id!,
+                p_base_model_id: v.base_model_billbee_product_id!,
+                p_qty: v.qty_ordered ?? 1,
+                p_unit_price: v.unit_price_net ?? null,
+                p_supplier_sku: v.supplier_sku ?? null,
+                p_details_override: v.details_override ?? null,
+                p_order_confirmation_ref: v.order_confirmation_ref ?? null,
+                p_external_file_url: v.external_file_url ?? null,
+                p_sketch_needed: v.sketch_needed ?? true,
+              });
+              if (error) throw error;
+
+              await refreshPositions();
+              setOpenSpecial(false);
+              setSelectedFullSpecial(null);
+              setSelectedBaseModel(null);
+              formSpecial.resetFields();
+              message.success("Sonder-Position hinzugefügt");
+            } catch (e: any) {
+              message.error(e?.message ?? "Fehler beim Hinzufügen.");
+            }
+          }}
           okText="Hinzufügen"
           cancelText="Abbrechen"
         >
@@ -1638,7 +1981,7 @@ const handlePoStatusChange = (next: Po["status"]) => {
               />
             </Form.Item>
 
-            <Form.Item label="Grundmodell wählen" required>
+            <Form.Item label="Grundmodell wählen">
               <AutoComplete
                 onSearch={(q) => searchProducts(q, "base")}
                 options={optionsBase}
@@ -1672,15 +2015,15 @@ const handlePoStatusChange = (next: Po["status"]) => {
             <Form.Item name="billbee_product_id" hidden rules={[{ required: true }]}>
               <InputNumber />
             </Form.Item>
-            <Form.Item name="base_model_billbee_product_id" hidden rules={[{ required: true }]}>
+            <Form.Item name="base_model_billbee_product_id" hidden>
               <InputNumber />
             </Form.Item>
 
             {/* Überschreibbare Felder */}
             <Row gutter={8}>
               <Col span={12}>
-                <Form.Item label="Ext. SKU (Override)" name="supplier_sku">
-                  <Input placeholder="leer = Grundmodell-Ext. SKU verwenden" />
+                <Form.Item label="Menge" name="qty_ordered" initialValue={1} rules={[{ required: true }]}>
+                  <InputNumber className="w-full" min={0.001} step={0.001} />
                 </Form.Item>
               </Col>
               <Col span={12}>
@@ -1696,8 +2039,8 @@ const handlePoStatusChange = (next: Po["status"]) => {
 
             <Row gutter={8}>
               <Col span={12}>
-                <Form.Item label="Menge" name="qty_ordered" initialValue={1} rules={[{ required: true }]}>
-                  <InputNumber className="w-full" min={0.001} step={0.001} />
+                <Form.Item label="Ext. SKU (Override)" name="supplier_sku">
+                  <Input placeholder="leer = Grundmodell-Ext. SKU verwenden" />
                 </Form.Item>
               </Col>
               <Col span={12}>

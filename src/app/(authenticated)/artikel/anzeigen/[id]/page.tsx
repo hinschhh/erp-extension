@@ -9,6 +9,7 @@ import { Card, Descriptions, Typography, Divider, Table, Tag, Row, Col, Space, B
 import { useShow, useList } from "@refinedev/core";
 import type { Tables } from "@/types/supabase";
 import type { HttpError } from "@refinedev/core";
+import { supabaseBrowserClient } from "@/utils/supabase/client";
 
 type ProductRow = Tables<"rpt_products_full">;
 type ProductRowStrict = Omit<ProductRow, "id"> & { id: number };
@@ -24,7 +25,7 @@ type InvRow = {
   stock_reserved_bom: number | string;
   stock_unavailable: number | string;
   stock_physical: number | string;
-  stock_on_order: number | string; // Platzhalter 0 aus View
+  stock_on_order: number | string;
   counted_qty: number | string;
   counted_at: string | null;
   unit_cost_net: number | string;
@@ -58,6 +59,17 @@ const UsedInImageCell: React.FC<{ id: number; alt?: string; size?: number }> = (
   );
 };
 
+type PoItemRow = {
+  id: string;
+  order_id: string;
+  order_number: string;
+  supplier_name: string;
+  internal_sku: string;
+  qty: number;
+  unit_price_net: number | null;
+  kind: "normal" | "special";
+};
+
 export default function ArtikelShowPage({ params }: { params: { id: string } }) {
   const id = params.id;
   const idNum = Number(id);
@@ -85,7 +97,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
   );
   const imageUrl = imgData?.imageUrl;
 
-  // BOM-Zuordnung inkl. quantity für den FALL, dass dieser Artikel selbst eine BOM ist
+  // BOM-Zuordnung inkl. quantity …
   const { data: bomListRes } = useList<Tables<"bom_recipes">, HttpError>({
     resource: "bom_recipes",
     filters: hasNumericId ? [{ field: "billbee_bom_id", operator: "eq", value: idNum }] : [],
@@ -123,10 +135,9 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
   const ekBOM = components.reduce((s, c) => s + (c.qty * Number(c.net_purchase_price ?? 0)), 0);
   const ekNetto = pStrict?.is_bom ? ekBOM : Number(pStrict?.net_purchase_price ?? 0);
 
-  // --- Bild-Box dynamisch an Höhe der linken Inhalte anpassen (max quadratisch) ---
+  // --- Bild-Box dynamisch …
   const leftRef = React.useRef<HTMLDivElement | null>(null);
   const [imgBoxSize, setImgBoxSize] = React.useState<number | null>(null);
-
   React.useLayoutEffect(() => {
     const updateSize = () => {
       const h = leftRef.current?.offsetHeight ?? 0;
@@ -140,7 +151,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
     return () => window.removeEventListener("resize", updateSize);
   }, [pStrict, imageUrl, components.length]);
 
-  // ---------- NEU: „Verwendet in …“ (nur wenn aktueller Artikel eine Komponente ist) ----------
+  // ---------- „Verwendet in …“ ----------
   const { data: usedInRecipeRes } = useList<Tables<"bom_recipes">, HttpError>({
     resource: "bom_recipes",
     filters: hasNumericId ? [{ field: "billbee_component_id", operator: "eq", value: idNum }] : [],
@@ -174,8 +185,93 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
     qty: qtyByParentId.get(b.id) ?? 1,
   }));
 
-  // ======= Lager-Datensatz aus der View ziehen =======
+  // ======= Lager-Datensatz =======
   const inv = data?.data?.[0];
+
+  // ======= NEU: Einkaufsbestellungen (Positionen) =======
+  const [poItems, setPoItems] = React.useState<PoItemRow[]>([]);
+  const [poItemsLoading, setPoItemsLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    const load = async () => {
+      if (!hasNumericId || !pStrict) return;
+      setPoItemsLoading(true);
+      const supabase = supabaseBrowserClient;
+
+      // 1) Relevante Positionen holen
+      const [{ data: n }, { data: s }] = await Promise.all([
+        supabase
+          .from("app_purchase_orders_positions_normal")
+          .select("id, order_id, billbee_product_id, qty_ordered, unit_price_net")
+          .eq("billbee_product_id", idNum),
+        supabase
+          .from("app_purchase_orders_positions_special")
+          .select("id, order_id, billbee_product_id, base_model_billbee_product_id, qty_ordered, unit_price_net")
+          .or(`base_model_billbee_product_id.eq.${idNum},billbee_product_id.eq.${idNum}`),
+      ]);
+
+      const combined = [
+        ...(n ?? []).map((r: any) => ({
+          id: r.id as string,
+          order_id: r.order_id as string,
+          qty: Number(r.qty_ordered ?? 0),
+          unit_price_net: typeof r.unit_price_net === "number" ? r.unit_price_net : null,
+          kind: "normal" as const,
+        })),
+        ...(s ?? []).map((r: any) => ({
+          id: r.id as string,
+          order_id: r.order_id as string,
+          qty: Number(r.qty_ordered ?? 0),
+          unit_price_net: typeof r.unit_price_net === "number" ? r.unit_price_net : null,
+          kind: "special" as const,
+        })),
+      ];
+
+      const orderIds = Array.from(new Set(combined.map((x) => x.order_id)));
+      if (!orderIds.length) {
+        setPoItems([]);
+        setPoItemsLoading(false);
+        return;
+      }
+
+      // 2) Bestellung + Lieferant auflösen
+      const { data: poList } = await supabase
+        .from("app_purchase_orders")
+        .select("id, order_number, supplier_id")
+        .in("id", orderIds);
+
+      const supplierIds = Array.from(new Set((poList ?? []).map((p) => p.supplier_id)));
+      const supplierMap = new Map<string, string>();
+      if (supplierIds.length) {
+        const { data: sup } = await supabase.from("app_suppliers").select("id, name").in("id", supplierIds);
+        (sup ?? []).forEach((s) => supplierMap.set(s.id as string, (s as any).name ?? "—"));
+      }
+
+      const poMap = new Map<string, { order_number: string; supplier_name: string }>();
+      (poList ?? []).forEach((p) =>
+        poMap.set(p.id as string, {
+          order_number: (p as any).order_number ?? "—",
+          supplier_name: supplierMap.get((p as any).supplier_id as string) ?? "—",
+        }),
+      );
+
+      const rows: PoItemRow[] = combined.map((c) => ({
+        id: c.id,
+        order_id: c.order_id,
+        order_number: poMap.get(c.order_id)?.order_number ?? "—",
+        supplier_name: poMap.get(c.order_id)?.supplier_name ?? "—",
+        internal_sku: pStrict.sku ?? "—",
+        qty: c.qty,
+        unit_price_net: c.unit_price_net,
+        kind: c.kind,
+      }));
+
+      setPoItems(rows);
+      setPoItemsLoading(false);
+    };
+
+    load();
+  }, [hasNumericId, idNum, pStrict]);
 
   return (
     <Card title={`Artikel anzeigen: ${pStrict?.sku ?? "—"}`}
@@ -186,7 +282,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
           </Link>
         ) : null
       }>
-      {/* Allgemein: links Text, rechts Bild */}
+      {/* Allgemein */}
       <Row gutter={16} align="top" wrap>
         <Col xs={24} md={16}>
           <div ref={leftRef}>
@@ -266,7 +362,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
 
       <Divider />
 
-      {/* ======= Lagerbestand (Drop-In) ======= */}
+      {/* Lagerbestand */}
       {!hasNumericId ? (
         <Typography.Text type="warning">Ungültige Artikel-ID für Lagerbestand.</Typography.Text>
       ) : isLoading ? (
@@ -299,7 +395,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
         </Descriptions>
       )}
 
-      {/* NEU: Verwendet in … (nur für Komponenten) */}
+      {/* Verwendet in … */}
       {!pStrict?.is_bom && (
         <>
           <Divider />
@@ -354,7 +450,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
         </>
       )}
 
-      {/* BOM-Komponenten (wenn aktueller Artikel eine BOM ist) */}
+      {/* BOM-Komponenten */}
       {pStrict?.is_bom && (
         <>
           <Divider />
@@ -423,6 +519,50 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
           </Card>
         </>
       )}
+
+      {/* ======= NEU: Einkaufsbestellungen ======= */}
+      <Divider />
+      <Card title={`Einkaufsbestellungen ${poItems.length ? `(${poItems.length})` : ""}`}>
+        <Table<PoItemRow>
+          rowKey={(r) => r.id}
+          dataSource={poItems}
+          loading={poItemsLoading}
+          size="small"
+          columns={[
+            {
+              title: "Bestellnummer",
+              dataIndex: "order_number",
+              width: 160,
+              render: (v: string, r) => (
+                <Link href={`/einkauf/bestellungen/bearbeiten/${r.order_id}`}>{v || "—"}</Link>
+              ),
+            },
+            { title: "Lieferant", dataIndex: "supplier_name", width: 220 },
+            { title: "Interne SKU", dataIndex: "internal_sku", width: 160 },
+            {
+              title: "Menge",
+              dataIndex: "qty",
+              width: 100,
+              render: (v: number) => v ?? 0,
+            },
+            {
+              title: "Preis (EK netto)",
+              dataIndex: "unit_price_net",
+              width: 160,
+              render: (v: number | null) => currency(v ?? null),
+            },
+            {
+              title: "Art",
+              dataIndex: "kind",
+              width: 110,
+              render: (k: PoItemRow["kind"]) => <Tag>{k}</Tag>,
+            },
+          ]}
+          pagination={{ pageSize: 20 }}
+          scroll={{ x: 900 }}
+          locale={{ emptyText: "Keine Bestellpositionen gefunden." }}
+        />
+      </Card>
     </Card>
   );
 }
