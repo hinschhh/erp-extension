@@ -303,98 +303,111 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
   };
 
   // ======= Einkaufsbestellungen (Positionen) – stabilisiert =======
-  const [poItems, setPoItems] = React.useState<PoItemRow[]>([]);
-  const [poItemsLoading, setPoItemsLoading] = React.useState(false);
+  // ======= Einkaufsbestellungen (Positionen) – nur für Nicht-BOM =======
+const [poItems, setPoItems] = React.useState<PoItemRow[]>([]);
+const [poItemsLoading, setPoItemsLoading] = React.useState(false);
 
-  React.useEffect(() => {
-    let mounted = true;
+// Primitive, stabile Dependencies
+const sku = pStrict?.sku ?? null;
+const isBom = !!pStrict?.is_bom;
 
-    const load = async () => {
-      if (!hasNumericId || !pStrict?.sku) {
+React.useEffect(() => {
+  let mounted = true;
+
+  const load = async () => {
+    // Früh raus, ohne Loading-Schleife
+    if (!hasNumericId || !sku || isBom) {
+      if (mounted) {
+        setPoItems([]);
+        setPoItemsLoading(false);
+      }
+      return;
+    }
+
+    setPoItemsLoading(true);
+    try {
+      const supabase = supabaseBrowserClient;
+
+      // 1) Positionen holen
+      const [{ data: n }, { data: s }] = await Promise.all([
+        supabase
+          .from("app_purchase_orders_positions_normal")
+          .select("id, order_id, billbee_product_id, qty_ordered, unit_price_net")
+          .eq("billbee_product_id", idNum),
+        supabase
+          .from("app_purchase_orders_positions_special")
+          .select("id, order_id, billbee_product_id, base_model_billbee_product_id, qty_ordered, unit_price_net")
+          .or(`base_model_billbee_product_id.eq.${idNum},billbee_product_id.eq.${idNum}`),
+      ]);
+
+      const combined = [
+        ...(n ?? []).map((r: any) => ({
+          id: r.id as string,
+          order_id: r.order_id as string,
+          qty: Number(r.qty_ordered ?? 0),
+          unit_price_net: typeof r.unit_price_net === "number" ? r.unit_price_net : null,
+          kind: "normal" as const,
+        })),
+        ...(s ?? []).map((r: any) => ({
+          id: r.id as string,
+          order_id: r.order_id as string,
+          qty: Number(r.qty_ordered ?? 0),
+          unit_price_net: typeof r.unit_price_net === "number" ? r.unit_price_net : null,
+          kind: "special" as const,
+        })),
+      ];
+
+      const orderIds = Array.from(new Set(combined.map((x) => x.order_id)));
+      if (!orderIds.length) {
         if (mounted) setPoItems([]);
         return;
       }
-      setPoItemsLoading(true);
-      try {
-        const supabase = supabaseBrowserClient;
 
-        const [{ data: n }, { data: s }] = await Promise.all([
-          supabase
-            .from("app_purchase_orders_positions_normal")
-            .select("id, order_id, billbee_product_id, qty_ordered, unit_price_net")
-            .eq("billbee_product_id", idNum),
-          supabase
-            .from("app_purchase_orders_positions_special")
-            .select("id, order_id, billbee_product_id, base_model_billbee_product_id, qty_ordered, unit_price_net")
-            .or(`base_model_billbee_product_id.eq.${idNum},billbee_product_id.eq.${idNum}`),
-        ]);
+      // 2) Bestellung + Lieferant auflösen
+      const { data: poList } = await supabase
+        .from("app_purchase_orders")
+        .select("id, order_number, supplier_id")
+        .in("id", orderIds);
 
-        const combined = [
-          ...(n ?? []).map((r: any) => ({
-            id: r.id as string,
-            order_id: r.order_id as string,
-            qty: Number(r.qty_ordered ?? 0),
-            unit_price_net: typeof r.unit_price_net === "number" ? r.unit_price_net : null,
-            kind: "normal" as const,
-          })),
-          ...(s ?? []).map((r: any) => ({
-            id: r.id as string,
-            order_id: r.order_id as string,
-            qty: Number(r.qty_ordered ?? 0),
-            unit_price_net: typeof r.unit_price_net === "number" ? r.unit_price_net : null,
-            kind: "special" as const,
-          })),
-        ];
-
-        const orderIds = Array.from(new Set(combined.map((x) => x.order_id)));
-        if (!orderIds.length) {
-          if (mounted) setPoItems([]);
-          return;
-        }
-
-        const { data: poList } = await supabase
-          .from("app_purchase_orders")
-          .select("id, order_number, supplier_id")
-          .in("id", orderIds);
-
-        const supplierIds = Array.from(new Set((poList ?? []).map((p) => p.supplier_id)));
-        const supplierMap = new Map<string, string>();
-        if (supplierIds.length) {
-          const { data: sup } = await supabase.from("app_suppliers").select("id, name").in("id", supplierIds);
-          (sup ?? []).forEach((s) => supplierMap.set(s.id as string, (s as any).name ?? "—"));
-        }
-
-        const poMap = new Map<string, { order_number: string; supplier_name: string }>();
-        (poList ?? []).forEach((p) =>
-          poMap.set(p.id as string, {
-            order_number: (p as any).order_number ?? "—",
-            supplier_name: supplierMap.get((p as any).supplier_id as string) ?? "—",
-          }),
-        );
-
-        const rows: PoItemRow[] = combined.map((c) => ({
-          id: c.id,
-          order_id: c.order_id,
-          order_number: poMap.get(c.order_id)?.order_number ?? "—",
-          supplier_name: poMap.get(c.order_id)?.supplier_name ?? "—",
-          internal_sku: pStrict.sku ?? "—",
-          qty: c.qty,
-          unit_price_net: c.unit_price_net,
-          kind: c.kind,
-        }));
-
-        if (mounted) setPoItems(rows);
-      } finally {
-        if (mounted) setPoItemsLoading(false);
+      const supplierIds = Array.from(new Set((poList ?? []).map((p) => p.supplier_id)));
+      const supplierMap = new Map<string, string>();
+      if (supplierIds.length) {
+        const { data: sup } = await supabase.from("app_suppliers").select("id, name").in("id", supplierIds);
+        (sup ?? []).forEach((s) => supplierMap.set(s.id as string, (s as any).name ?? "—"));
       }
-    };
 
-    load();
-    return () => {
-      mounted = false;
-    };
-    // ⚠️ Nur stabile Dependencies – verhindert Endlos-Schleife
-  }, [idNum, pStrict?.sku, hasNumericId]);
+      const poMap = new Map<string, { order_number: string; supplier_name: string }>();
+      (poList ?? []).forEach((p) =>
+        poMap.set(p.id as string, {
+          order_number: (p as any).order_number ?? "—",
+          supplier_name: supplierMap.get((p as any).supplier_id as string) ?? "—",
+        }),
+      );
+
+      const rows: PoItemRow[] = combined.map((c) => ({
+        id: c.id,
+        order_id: c.order_id,
+        order_number: poMap.get(c.order_id)?.order_number ?? "—",
+        supplier_name: poMap.get(c.order_id)?.supplier_name ?? "—",
+        internal_sku: sku ?? "—",
+        qty: c.qty,
+        unit_price_net: c.unit_price_net,
+        kind: c.kind,
+      }));
+
+      if (mounted) setPoItems(rows);
+    } finally {
+      if (mounted) setPoItemsLoading(false);
+    }
+  };
+
+  load();
+  return () => {
+    mounted = false;
+  };
+  // Stabile Primitives verhindern Re-Trigger „aus Versehen“
+}, [hasNumericId, idNum, sku, isBom]);
+
 
   return (
     <Card

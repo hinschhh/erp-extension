@@ -19,6 +19,7 @@ import {
   Col,
   List,
   Tooltip,
+  Divider,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
@@ -30,6 +31,7 @@ import {
   DollarOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
+import Search from "antd/es/input/Search";
 
 const { Text } = Typography;
 
@@ -795,7 +797,13 @@ const Page: React.FC = () => {
             </Card>
           </Col>
         </Row>
-
+        < Divider />
+        <Col style={{ display: "flex", justifyContent: "flex-end" }}>
+          <Button type="primary" onClick={() => router.push("/einkauf/bestellungen/nanlegen")}>
+            Bestellung anlegen
+          </Button>
+        </Col>
+        < Divider />
         {/* Tabelle + Expand */}
         <Table<PoListVm>
           rowKey="id"

@@ -43,7 +43,7 @@ const toStrict = (rows?: ProductRow[] | null): ProductRowStrict[] =>
     .filter((r): r is ProductRow => !!r && r.id != null)
     .map((r) => ({ ...(r as ProductRow), id: Number(r.id) }));
 
-// Kleines Zellen-Component für Bilder (holt imageUrl via SWR JSON-Endpoint)
+// Bildzelle für Tabellen
 const UsedInImageCell: React.FC<{ id: number; alt?: string; size?: number }> = ({ id, alt, size = 48 }) => {
   const { data } = useSWR<{ imageUrl?: string }>(`/api/billbee/products/get/${id}`, fetcher);
   if (!data?.imageUrl) return <>—</>;
@@ -80,7 +80,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
     id,
   });
 
-  // Lagerdaten laden (aus deiner View)
+  // Lagerdaten laden
   const { data, isLoading, isError, error } = useList<InvRow>({
     resource: "rpt_products_inventory_purchasing",
     filters: [{ field: "billbee_product_id", operator: "eq", value: idNum }],
@@ -89,7 +89,8 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
   });
 
   const p = queryResult?.data?.data as ProductRow | undefined;
-  const pStrict: ProductRowStrict | undefined = p && p.id != null ? { ...(p as ProductRow), id: Number(p.id) } : undefined;
+  const pStrict: ProductRowStrict | undefined =
+    p && p.id != null ? { ...(p as ProductRow), id: Number(p.id) } : undefined;
 
   const { data: imgData } = useSWR<{ imageUrl?: string }>(
     hasNumericId ? `/api/billbee/products/get/${idNum}` : null,
@@ -97,7 +98,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
   );
   const imageUrl = imgData?.imageUrl;
 
-  // BOM-Zuordnung inkl. quantity …
+  // BOM-Zuordnung inkl. quantity … (nur wenn Artikel selbst BOM ist)
   const { data: bomListRes } = useList<Tables<"bom_recipes">, HttpError>({
     resource: "bom_recipes",
     filters: hasNumericId ? [{ field: "billbee_bom_id", operator: "eq", value: idNum }] : [],
@@ -119,12 +120,11 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
     return m;
   }, [bomListRes?.data]);
 
-  const compIdsArray = componentIds;
   const { data: compRes } = useList<ProductRow[], HttpError>({
     resource: "rpt_products_full",
-    filters: compIdsArray.length ? [{ field: "id", operator: "in", value: compIdsArray }] : [],
+    filters: componentIds.length ? [{ field: "id", operator: "in", value: componentIds }] : [],
     pagination: { pageSize: 500 },
-    queryOptions: { enabled: !!pStrict?.is_bom && compIdsArray.length > 0 },
+    queryOptions: { enabled: !!pStrict?.is_bom && componentIds.length > 0 },
   });
 
   const components: ComponentWithQty[] = toStrict(compRes?.data as ProductRow[] | undefined).map((c) => ({
@@ -132,26 +132,23 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
     qty: qtyById.get(c.id) ?? 1,
   }));
 
-  const ekBOM = components.reduce((s, c) => s + (c.qty * Number(c.net_purchase_price ?? 0)), 0);
+  const ekBOM = components.reduce((s, c) => s + c.qty * Number(c.net_purchase_price ?? 0), 0);
   const ekNetto = pStrict?.is_bom ? ekBOM : Number(pStrict?.net_purchase_price ?? 0);
 
-  // --- Bild-Box dynamisch …
+  // Bild-Box dynamisch anpassen
   const leftRef = React.useRef<HTMLDivElement | null>(null);
   const [imgBoxSize, setImgBoxSize] = React.useState<number | null>(null);
   React.useLayoutEffect(() => {
     const updateSize = () => {
       const h = leftRef.current?.offsetHeight ?? 0;
-      if (h > 0) {
-        const maxSide = Math.min(h, 420);
-        setImgBoxSize(maxSide);
-      }
+      if (h > 0) setImgBoxSize(Math.min(h, 420));
     };
     updateSize();
     window.addEventListener("resize", updateSize);
     return () => window.removeEventListener("resize", updateSize);
   }, [pStrict, imageUrl, components.length]);
 
-  // ---------- „Verwendet in …“ ----------
+  // „Verwendet in …“ (nur für Komponenten)
   const { data: usedInRecipeRes } = useList<Tables<"bom_recipes">, HttpError>({
     resource: "bom_recipes",
     filters: hasNumericId ? [{ field: "billbee_component_id", operator: "eq", value: idNum }] : [],
@@ -185,20 +182,35 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
     qty: qtyByParentId.get(b.id) ?? 1,
   }));
 
-  // ======= Lager-Datensatz =======
+  // Lager-Datensatz
   const inv = data?.data?.[0];
 
-  // ======= NEU: Einkaufsbestellungen (Positionen) =======
-  const [poItems, setPoItems] = React.useState<PoItemRow[]>([]);
-  const [poItemsLoading, setPoItemsLoading] = React.useState(false);
+  // ======= Einkaufsbestellungen (Positionen) – nur für Nicht-BOM =======
+const [poItems, setPoItems] = React.useState<PoItemRow[]>([]);
+const [poItemsLoading, setPoItemsLoading] = React.useState(false);
 
-  React.useEffect(() => {
-    const load = async () => {
-      if (!hasNumericId || !pStrict) return;
-      setPoItemsLoading(true);
+// Primitive, stabile Dependencies
+const sku = pStrict?.sku ?? null;
+const isBom = !!pStrict?.is_bom;
+
+React.useEffect(() => {
+  let mounted = true;
+
+  const load = async () => {
+    // Früh raus, ohne Loading-Schleife
+    if (!hasNumericId || !sku || isBom) {
+      if (mounted) {
+        setPoItems([]);
+        setPoItemsLoading(false);
+      }
+      return;
+    }
+
+    setPoItemsLoading(true);
+    try {
       const supabase = supabaseBrowserClient;
 
-      // 1) Relevante Positionen holen
+      // 1) Positionen holen
       const [{ data: n }, { data: s }] = await Promise.all([
         supabase
           .from("app_purchase_orders_positions_normal")
@@ -229,8 +241,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
 
       const orderIds = Array.from(new Set(combined.map((x) => x.order_id)));
       if (!orderIds.length) {
-        setPoItems([]);
-        setPoItemsLoading(false);
+        if (mounted) setPoItems([]);
         return;
       }
 
@@ -260,28 +271,36 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
         order_id: c.order_id,
         order_number: poMap.get(c.order_id)?.order_number ?? "—",
         supplier_name: poMap.get(c.order_id)?.supplier_name ?? "—",
-        internal_sku: pStrict.sku ?? "—",
+        internal_sku: sku ?? "—",
         qty: c.qty,
         unit_price_net: c.unit_price_net,
         kind: c.kind,
       }));
 
-      setPoItems(rows);
-      setPoItemsLoading(false);
-    };
+      if (mounted) setPoItems(rows);
+    } finally {
+      if (mounted) setPoItemsLoading(false);
+    }
+  };
 
-    load();
-  }, [hasNumericId, idNum, pStrict]);
+  load();
+  return () => {
+    mounted = false;
+  };
+  // Stabile Primitives verhindern Re-Trigger „aus Versehen“
+}, [hasNumericId, idNum, sku, isBom]);
 
   return (
-    <Card title={`Artikel anzeigen: ${pStrict?.sku ?? "—"}`}
+    <Card
+      title={`Artikel anzeigen: ${pStrict?.sku ?? "—"}`}
       extra={
         pStrict?.id ? (
           <Link href={`/artikel/bearbeiten/${pStrict.id}`} prefetch>
             <Button>Bearbeiten</Button>
           </Link>
         ) : null
-      }>
+      }
+    >
       {/* Allgemein */}
       <Row gutter={16} align="top" wrap>
         <Col xs={24} md={16}>
@@ -299,8 +318,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
               </Descriptions.Item>
               <Descriptions.Item label="Zeitstempel (dezent)">
                 <span style={{ color: "#999" }}>
-                  Mirror angelegt: {pStrict?.product_created_at ?? "—"} · Extension aktualisiert:{" "}
-                  {pStrict?.ext_updated_at ?? "—"}
+                  Mirror angelegt: {pStrict?.product_created_at ?? "—"} · Extension aktualisiert: {pStrict?.ext_updated_at ?? "—"}
                 </span>
               </Descriptions.Item>
             </Descriptions>
@@ -388,14 +406,13 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
             <b>{inv.stock_physical}</b>
           </Descriptions.Item>
           <Descriptions.Item label="Nachbestellt (Platzhalter)">{inv.stock_on_order}</Descriptions.Item>
-
           <Descriptions.Item label="Zählbestand">{inv.counted_qty}</Descriptions.Item>
           <Descriptions.Item label="Zähldatum">{inv.counted_at ?? "—"}</Descriptions.Item>
           <Descriptions.Item label="Inventarwert">{currency(Number(inv.inventory_value as any))}</Descriptions.Item>
         </Descriptions>
       )}
 
-      {/* Verwendet in … */}
+      {/* Verwendet in … (nur Komponente) */}
       {!pStrict?.is_bom && (
         <>
           <Divider />
@@ -450,7 +467,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
         </>
       )}
 
-      {/* BOM-Komponenten */}
+      {/* BOM-Komponenten (nur wenn aktueller Artikel eine BOM ist) */}
       {pStrict?.is_bom && (
         <>
           <Divider />
@@ -520,49 +537,53 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
         </>
       )}
 
-      {/* ======= NEU: Einkaufsbestellungen ======= */}
-      <Divider />
-      <Card title={`Einkaufsbestellungen ${poItems.length ? `(${poItems.length})` : ""}`}>
-        <Table<PoItemRow>
-          rowKey={(r) => r.id}
-          dataSource={poItems}
-          loading={poItemsLoading}
-          size="small"
-          columns={[
-            {
-              title: "Bestellnummer",
-              dataIndex: "order_number",
-              width: 160,
-              render: (v: string, r) => (
-                <Link href={`/einkauf/bestellungen/bearbeiten/${r.order_id}`}>{v || "—"}</Link>
-              ),
-            },
-            { title: "Lieferant", dataIndex: "supplier_name", width: 220 },
-            { title: "Interne SKU", dataIndex: "internal_sku", width: 160 },
-            {
-              title: "Menge",
-              dataIndex: "qty",
-              width: 100,
-              render: (v: number) => v ?? 0,
-            },
-            {
-              title: "Preis (EK netto)",
-              dataIndex: "unit_price_net",
-              width: 160,
-              render: (v: number | null) => currency(v ?? null),
-            },
-            {
-              title: "Art",
-              dataIndex: "kind",
-              width: 110,
-              render: (k: PoItemRow["kind"]) => <Tag>{k}</Tag>,
-            },
-          ]}
-          pagination={{ pageSize: 20 }}
-          scroll={{ x: 900 }}
-          locale={{ emptyText: "Keine Bestellpositionen gefunden." }}
-        />
-      </Card>
+      {/* Einkaufsbestellungen – nur anzeigen, wenn KEIN BOM */}
+      {!pStrict?.is_bom && (
+        <>
+          <Divider />
+          <Card title={`Einkaufsbestellungen ${poItems.length ? `(${poItems.length})` : ""}`}>
+            <Table<PoItemRow>
+              rowKey={(r) => r.id}
+              dataSource={poItems}
+              loading={poItemsLoading}
+              size="small"
+              columns={[
+                {
+                  title: "Bestellnummer",
+                  dataIndex: "order_number",
+                  width: 160,
+                  render: (v: string, r) => (
+                    <Link href={`/einkauf/bestellungen/bearbeiten/${r.order_id}`}>{v || "—"}</Link>
+                  ),
+                },
+                { title: "Lieferant", dataIndex: "supplier_name", width: 220 },
+                { title: "Interne SKU", dataIndex: "internal_sku", width: 160 },
+                {
+                  title: "Menge",
+                  dataIndex: "qty",
+                  width: 100,
+                  render: (v: number) => v ?? 0,
+                },
+                {
+                  title: "Preis (EK netto)",
+                  dataIndex: "unit_price_net",
+                  width: 160,
+                  render: (v: number | null) => currency(v ?? null),
+                },
+                {
+                  title: "Art",
+                  dataIndex: "kind",
+                  width: 110,
+                  render: (k: PoItemRow["kind"]) => <Tag>{k}</Tag>,
+                },
+              ]}
+              pagination={{ pageSize: 20 }}
+              scroll={{ x: 900 }}
+              locale={{ emptyText: "Keine Bestellpositionen gefunden." }}
+            />
+          </Card>
+        </>
+      )}
     </Card>
   );
 }

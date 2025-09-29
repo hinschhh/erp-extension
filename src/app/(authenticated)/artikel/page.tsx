@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useTable } from "@refinedev/antd";
 import { Table, Card, Space, Tag, Input, Button } from "antd";
 import type { Tables } from "@/types/supabase";
-import { EditOutlined } from "@ant-design/icons";
+import { EditOutlined, EyeOutlined } from "@ant-design/icons";
 
 type Row = Omit<Tables<"rpt_products_full">, "id"> & { id: number };
 
@@ -52,7 +52,7 @@ export default function ArtikelListPage() {
             title: "SKU",
             dataIndex: "sku",
             render: (v, r) => (
-              <Link href={`/artikel/bearbeiten/${r.id}`}>{v ?? "—"}</Link>
+              <Link href={`/artikel/anzeigen/${r.id}`}>{v ?? "—"}</Link>
             ),
           },
           { title: "Name", dataIndex: "name", ellipsis: true },
@@ -90,7 +90,12 @@ export default function ArtikelListPage() {
             width: 180,
             render: (_: any, r) => (
               <Space size="small">
-                <Button 
+                <Button
+                  icon={<EyeOutlined />}
+                  href={`/artikel/anzeigen/${r.id}`}
+                >
+                </Button>
+                <Button
                   icon={<EditOutlined />}
                   href={`/artikel/bearbeiten/${r.id}`}
                 >
