@@ -29,7 +29,7 @@ import {
   Alert,
   Steps,
   Progress,
-  Divider
+  Divider,
 } from "antd";
 import {
   FileTextOutlined,
@@ -80,22 +80,21 @@ const STATUS_OPTIONS = [
 const toDate = (d?: string | null) => (d ? dayjs(d) : undefined);
 const fromDate = (d?: Dayjs | null) => (d ? d.format("YYYY-MM-DD") : null);
 
-// UI-Helfer (Overflow vermeiden)
+// UI-Helfer
 const cellEllipsis = (content?: React.ReactNode, tooltip?: React.ReactNode) => (
   <Paragraph style={{ margin: 0 }} ellipsis={{ rows: 2, tooltip: tooltip ?? content }}>
     {content ?? "—"}
   </Paragraph>
 );
-// --- Helper: Geldformat ---
 const formatEUR = (n: number) =>
   (n ?? 0).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
 
-// --- Helper: Status → Step-Index ---
 const statusToStepIndex = (s?: Po["status"]) => {
   switch (s) {
-    case "draft": return 0;
-    case "ordered": return 1;
-    // alles ab "confirmed" bis inkl. teilw. geliefert zählt als Step 2..3
+    case "draft":
+      return 0;
+    case "ordered":
+      return 1;
     case "confirmed":
     case "in_production":
     case "partially_in_production":
@@ -104,12 +103,11 @@ const statusToStepIndex = (s?: Po["status"]) => {
     case "delivered":
       return 3;
     case "cancelled":
-      return 3; // wir zeigen zusätzlich ein rotes Tag im UI (s.u.)
+      return 3;
     default:
       return 0;
   }
 };
-
 
 // -------- Positions-Status --------
 type ItemStatus =
@@ -187,7 +185,7 @@ const ConfirmSketchButton: React.FC<ConfirmSketchButtonProps> = ({ position, onS
       },
     });
   };
-  
+
   if (!position.sketch_needed) return null;
 
   return (
@@ -246,87 +244,9 @@ export default function BestellungBearbeitenPage() {
     unit_price_net?: number | null;
     details_override?: string | null;
     supplier_sku?: string | null;
-    order_confirmation_ref?: string | null;
+    order_confirmation_ref?: string | null; // AB-Ref inline edit
     external_file_url?: string | null;
   }>({});
-
-    // Für die Auswertung:
-  // --- Summen Positionen ---
-const sumNormal = posNormal.reduce(
-  (acc, r) => acc + Number(r.qty_ordered ?? 0) * Number(r.unit_price_net ?? 0),
-  0,
-);
-const sumSpecial = posSpecial.reduce(
-  (acc, r) => acc + Number(r.qty_ordered ?? 0) * Number(r.unit_price_net ?? 0),
-  0,
-);
-const sumPositions = sumNormal + sumSpecial;
-
-// --- Versandkosten / Separate Invoice (robust auf beide Schreibweisen) ---
-const shipping = Number(form.getFieldValue("shipping_cost_net") ?? 0);
-const separateInvoice =
-  Boolean(
-    form.getFieldValue("separate_invoice_for_shipping_cost"),
-  );
-
-// Versandkosten, die auf der Rechnung dieser Bestellung stehen
-const shippingOnInvoice = separateInvoice ? 0 : shipping;
-
-// Versandkosten als Anschaffungsnebenkosten (separate Rechnung)
-const ancillaryCosts = separateInvoice ? shipping : 0;
-
-// Rechnungssumme (nur Positionen + evtl. Versand auf Rechnung)
-const invoiceSum = sumPositions + shippingOnInvoice;
-
-// Anschaffungskosten (Rechnungssumme + Nebenkosten)
-const acquisitionCost = invoiceSum + ancillaryCosts;
-
-// --- Status-Helper ---
-const isActiveItem = (p: any) => {
-  const s = effectiveItemStatus(p);
-  return s !== "paused" && s !== "cancelled";
-};
-
-// --- Zählungen pausiert/storniert (für Hinweis) ---
-const pausedNormal = posNormal.filter((p) => effectiveItemStatus(p) === "paused").length;
-const pausedSpecial = posSpecial.filter((p) => effectiveItemStatus(p) === "paused").length;
-const cancelledNormal = posNormal.filter((p) => effectiveItemStatus(p) === "cancelled").length;
-const cancelledSpecial = posSpecial.filter((p) => effectiveItemStatus(p) === "cancelled").length;
-
-const pausedTotal = pausedNormal + pausedSpecial;
-const cancelledTotal = cancelledNormal + cancelledSpecial;
-
-// --- Aktive Positionen (für Progress-Berechnungen) ---
-const normalActive = posNormal.filter(isActiveItem);
-const specialActive = posSpecial.filter(isActiveItem);
-
-const totalActiveNormal = normalActive.length;
-const totalActiveSpecial = specialActive.length;
-const totalActivePositions = totalActiveNormal + totalActiveSpecial;
-
-// --- Delivered-Progress (nur aktive Positionen) ---
-const deliveredActiveNormal = normalActive.filter((p) => effectiveItemStatus(p) === "delivered").length;
-const deliveredActiveSpecial = specialActive.filter((p) => effectiveItemStatus(p) === "delivered").length;
-const deliveredActiveTotal = deliveredActiveNormal + deliveredActiveSpecial;
-
-const deliveredPercent = totalActivePositions
-  ? Math.round((deliveredActiveTotal / totalActivePositions) * 100)
-  : 0;
-
-// --- Sketch-Progress (nur aktive Sonder-Positionen mit sketch_needed = true) ---
-const sketchRequired = specialActive.filter((p) => Boolean(p.sketch_needed)).length;
-const sketchConfirmed = specialActive.filter((p) => Boolean(p.sketch_needed) && p.sketch_confirmed_at).length;
-
-const sketchPercent = sketchRequired ? Math.round((sketchConfirmed / sketchRequired) * 100) : 0;
-
-
-// --- Verspätungsinfo wie gehabt ---
-const dolPlanned = form.getFieldValue("dol_planned_at") as Dayjs | undefined;
-const dolActual  = form.getFieldValue("dol_actual_at") as Dayjs | undefined;
-const hasDelay   = dolPlanned && dolActual && dolActual.isAfter(dolPlanned);
-const delayDays  = hasDelay ? dolActual!.diff(dolPlanned!, "day") : 0;
-
-
 
   // Produkt-Cache
   const [productCache, setProductCache] = React.useState<Record<number, ProductFull>>({});
@@ -338,8 +258,14 @@ const delayDays  = hasDelay ? dolActual!.diff(dolPlanned!, "day") : 0;
     TablesInsert<"app_purchase_orders_positions_normal"> & { details_override?: string }
   >();
   const [formSpecial] = Form.useForm<
-    TablesInsert<"app_purchase_orders_positions_special"> & { base_model_billbee_product_id?: number }
+    TablesInsert<"app_purchase_orders_positions_special"> & {
+      base_model_billbee_product_id?: number;
+      __base_model_pick__?: string;
+    }
   >();
+
+  // NEU: Merker für zuletzt verwendetes SB-Produkt (wird beim erneuten Öffnen vorgefüllt)
+  const [lastSpecialSbProductId, setLastSpecialSbProductId] = React.useState<number | null>(null);
 
   // AutoComplete-Optionen
   type Option = { value: string; label: string; full: ProductFull };
@@ -356,171 +282,155 @@ const delayDays  = hasDelay ? dolActual!.diff(dolPlanned!, "day") : 0;
   const [selectedBaseModel, setSelectedBaseModel] = React.useState<ProductFull | null>(null);
 
   // =====================
-// Produkt-Suche & Select-Handler
-// =====================
+  // Produkt-Suche & Select-Handler
+  // =====================
 
-// (Optional) Umschalter, falls ihr in rpt_products_full bereits eine FTS-Spalte wie "fts" / "search" habt.
-const ENABLE_FTS = false; // auf true setzen, wenn tsvector-Spalte existiert
+  const ENABLE_FTS = false; // optional aktivieren, wenn FTS-Spalte vorhanden
 
-// Supabase-Suche nach Produkten – gefiltert nach Hersteller = Lieferant
-const searchProducts = React.useCallback(
-  async (q: string, mode: "normal" | "special" | "base") => {
-    const supplierName = orderSupplierName?.trim();
-    if (!supplierName || !q || q.trim().length < 2) {
-      if (mode === "normal") setOptionsNormal([]);
-      if (mode === "special") setOptionsSpecial([]);
-      if (mode === "base") setOptionsBase([]);
-      return;
-    }
+  // Supabase-Suche nach Produkten – gefiltert nach Hersteller = Lieferant
+  const searchProducts = React.useCallback(
+    async (q: string, mode: "normal" | "special" | "base") => {
+      const supplierName = orderSupplierName?.trim();
+      if (!supplierName || !q || q.trim().length < 2) {
+        if (mode === "normal") setOptionsNormal([]);
+        if (mode === "special") setOptionsSpecial([]);
+        if (mode === "base") setOptionsBase([]);
+        return;
+      }
 
-    if (mode === "normal") setSearchingNormal(true);
-    if (mode === "special") setSearchingSpecial(true);
-    if (mode === "base") setSearchingBase(true);
+      if (mode === "normal") setSearchingNormal(true);
+      if (mode === "special") setSearchingSpecial(true);
+      if (mode === "base") setSearchingBase(true);
 
-    // 1) Versuch: Full-Text-Search (wenn konfiguriert)
-    let data: any[] | null = null;
-    let error: any = null;
+      let data: any[] | null = null;
+      let error: any = null;
 
-    if (ENABLE_FTS) {
-  const { data: d1, error: e1 } = await supabase
-    .from("rpt_products_full")
-    .select("id,sku,external_sku,name,manufacturer,purchase_details,net_purchase_price")
-    .ilike("manufacturer", `%${supplierName}%`)
-    // PostgREST-Operator für Fulltext:
-    // 'wfts' = websearch_to_tsquery, alternativ: 'plfts' (plainto), 'phfts' (phrase), 'fts' (to_tsquery)
-    .filter("sku", "wfts", q)
-    .limit(100);
+      if (ENABLE_FTS) {
+        const { data: d1, error: e1 } = await supabase
+          .from("rpt_products_full")
+          .select("id,sku,external_sku,name,manufacturer,purchase_details,net_purchase_price")
+          .ilike("manufacturer", `%${supplierName}%`)
+          .filter("sku", "wfts", q)
+          .limit(100);
+        data = d1 ?? null;
+        error = e1 ?? null;
+      }
 
-  data = d1 ?? null;
-  error = e1 ?? null;
-}
+      if (!ENABLE_FTS || error) {
+        const { data: d2, error: e2 } = await supabase
+          .from("rpt_products_full")
+          .select("id,sku,external_sku,name,manufacturer,purchase_details,net_purchase_price")
+          .ilike("manufacturer", `%${supplierName}%`)
+          .or(
+            [
+              `external_sku.ilike.%${q}%`,
+              `name.ilike.%${q}%`,
+              `purchase_details.ilike.%${q}%`,
+              `sku.ilike.%${q}%`,
+            ].join(","),
+          )
+          .limit(100);
+        data = d2 ?? null;
+        error = e2 ?? null;
+      }
 
-    // 2) Fallback: ILIKE auf ein paar Felder
-    if (!ENABLE_FTS || error) {
-      const { data: d2, error: e2 } = await supabase
-        .from("rpt_products_full")
-        .select("id,sku,external_sku,name,manufacturer,purchase_details,net_purchase_price")
-        .ilike("manufacturer", `%${supplierName}%`)
-        .or(
-          [
-            `external_sku.ilike.%${q}%`,
-            `name.ilike.%${q}%`,
-            `purchase_details.ilike.%${q}%`,
-            `sku.ilike.%${q}%`,
-          ].join(","),
-        )
-        .limit(100);
-      data = d2 ?? null;
-      error = e2 ?? null;
-    }
+      if (error) {
+        if (mode === "normal") setSearchingNormal(false);
+        if (mode === "special") setSearchingSpecial(false);
+        if (mode === "base") setSearchingBase(false);
+        return message.error(error.message || "Produktsuche fehlgeschlagen.");
+      }
 
-    if (error) {
-      if (mode === "normal") setSearchingNormal(false);
-      if (mode === "special") setSearchingSpecial(false);
-      if (mode === "base") setSearchingBase(false);
-      return message.error(error.message || "Produktsuche fehlgeschlagen.");
-    }
+      const filtered: ProductFull[] = (data ?? []).map((r: any) => ({
+        billbee_product_id: r.id,
+        sku: r.sku ?? null,
+        external_sku: r.external_sku ?? null,
+        name: r.name ?? null,
+        manufacturer: r.manufacturer ?? null,
+        purchase_details: r.purchase_details ?? null,
+        net_purchase_price: r.net_purchase_price ?? null,
+      }));
 
-    const filtered: ProductFull[] = (data ?? []).map((r: any) => ({
-      billbee_product_id: r.id,
-      sku: r.sku ?? null,
-      external_sku: r.external_sku ?? null,
-      name: r.name ?? null,
-      manufacturer: r.manufacturer ?? null,
-      purchase_details: r.purchase_details ?? null,
-      net_purchase_price: r.net_purchase_price ?? null,
-    }));
+      const opts: Option[] = filtered.map((r) => ({
+        value: String(r.billbee_product_id),
+        label: `${r.sku ?? "(ohne SKU)"} — ${r.external_sku ?? ""}`,
+        full: r,
+      }));
 
-    const opts: Option[] = filtered.map((r) => ({
-      value: String(r.billbee_product_id),
-      label: `${r.sku ?? "(ohne SKU)"} — ${r.external_sku ?? ""}`,
-      full: r,
-    }));
+      if (mode === "normal") {
+        setOptionsNormal(opts);
+        setSearchingNormal(false);
+      } else if (mode === "special") {
+        setOptionsSpecial(opts);
+        setSearchingSpecial(false);
+      } else {
+        setOptionsBase(opts);
+        setSearchingBase(false);
+      }
+    },
+    [orderSupplierName, supabase, message],
+  );
 
-    if (mode === "normal") {
-      setOptionsNormal(opts);
-      setSearchingNormal(false);
-    } else if (mode === "special") {
-      setOptionsSpecial(opts);
-      setSearchingSpecial(false);
-    } else {
-      setOptionsBase(opts);
-      setSearchingBase(false);
-    }
-  },
-  [
-    orderSupplierName,
-    supabase,
-    message,
-    setOptionsNormal,
-    setOptionsSpecial,
-    setOptionsBase,
-    setSearchingNormal,
-    setSearchingSpecial,
-    setSearchingBase,
-  ],
-);
+  // Kleiner Bestätigungsdialog, falls Details-Override überschrieben werden würde
+  const askOverride = (current?: string | null, incoming?: string | null) =>
+    new Promise<boolean>((resolve) => {
+      if (current && current.trim() !== "" && incoming && incoming.trim() !== "") {
+        Modal.confirm({
+          title: "Details überschreiben?",
+          content:
+            "Für diese Position existiert bereits ein Details-Override. Möchtest du ihn durch die Einkaufsdetails aus der Extension ersetzen?",
+          okText: "Überschreiben",
+          cancelText: "Behalten",
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      } else {
+        resolve(true);
+      }
+    });
 
-// Kleiner Bestätigungsdialog, falls Details-Override überschrieben werden würde
-const askOverride = (current?: string | null, incoming?: string | null) =>
-  new Promise<boolean>((resolve) => {
-    if (current && current.trim() !== "" && incoming && incoming.trim() !== "") {
-      Modal.confirm({
-        title: "Details überschreiben?",
-        content:
-          "Für diese Position existiert bereits ein Details-Override. Möchtest du ihn durch die Einkaufsdetails aus der Extension ersetzen?",
-        okText: "Überschreiben",
-        cancelText: "Behalten",
-        onOk: () => resolve(true),
-        onCancel: () => resolve(false),
-      });
-    } else {
-      resolve(true);
-    }
-  });
+  // Auswahl-Handler: Normale Position – füllt Vorschlagsfelder im Modal
+  const onSelectNormal = async (_: string, option: Option) => {
+    const full = option.full;
+    setSelectedFullNormal(full);
 
-// Auswahl-Handler: Normale Position – füllt Vorschlagsfelder im Modal
-const onSelectNormal = async (_: string, option: Option) => {
-  const full = option.full;
-  setSelectedFullNormal(full);
+    const current = formNormal.getFieldValue("details_override") as string | undefined;
+    const allow = await askOverride(current, full.purchase_details ?? undefined);
 
-  const current = formNormal.getFieldValue("details_override") as string | undefined;
-  const allow = await askOverride(current, full.purchase_details ?? undefined);
+    formNormal.setFieldsValue({
+      billbee_product_id: Number(option.value),
+      unit_price_net: full.net_purchase_price ?? undefined,
+      qty_ordered: formNormal.getFieldValue("qty_ordered") ?? 1,
+      internal_notes: formNormal.getFieldValue("internal_notes"),
+      details_override: allow ? full.purchase_details ?? undefined : current,
+    } as any);
+  };
 
-  formNormal.setFieldsValue({
-    billbee_product_id: Number(option.value),
-    unit_price_net: full.net_purchase_price ?? undefined,
-    qty_ordered: formNormal.getFieldValue("qty_ordered") ?? 1,
-    internal_notes: formNormal.getFieldValue("internal_notes"),
-    details_override: allow ? full.purchase_details ?? undefined : current,
-  } as any);
-};
+  // Auswahl-Handler: Sonder-Position – wählt SB-Produkt
+  const onSelectSpecial = async (_: string, option: Option) => {
+    const full = option.full;
+    setSelectedFullSpecial(full);
+    formSpecial.setFieldsValue({
+      billbee_product_id: Number(option.value),
+    } as any);
+  };
 
-// Auswahl-Handler: Sonder-Position – wählt SB-Produkt
-const onSelectSpecial = async (_: string, option: Option) => {
-  const full = option.full;
-  setSelectedFullSpecial(full);
-  formSpecial.setFieldsValue({
-    billbee_product_id: Number(option.value),
-  } as any);
-};
+  // Auswahl-Handler: Grundmodell – übernimmt Ext. SKU, EK & Details als Vorschlag
+  const onSelectBaseModel = async (_: string, option: Option) => {
+    const full = option.full;
+    setSelectedBaseModel(full);
 
-// Auswahl-Handler: Grundmodell – übernimmt Ext. SKU, EK & Details als Vorschlag
-const onSelectBaseModel = async (_: string, option: Option) => {
-  const full = option.full;
-  setSelectedBaseModel(full);
+    const current = formSpecial.getFieldValue("details_override") as string | undefined;
+    const allow = await askOverride(current, full.purchase_details ?? undefined);
 
-  const current = formSpecial.getFieldValue("details_override") as string | undefined;
-  const allow = await askOverride(current, full.purchase_details ?? undefined);
-
-  formSpecial.setFieldsValue({
-    base_model_billbee_product_id: Number(option.value),
-    supplier_sku: formSpecial.getFieldValue("supplier_sku") ?? full.external_sku ?? undefined,
-    unit_price_net: formSpecial.getFieldValue("unit_price_net") ?? full.net_purchase_price ?? undefined,
-    details_override: allow ? full.purchase_details ?? undefined : current,
-  } as any);
-};
-
+    formSpecial.setFieldsValue({
+      __base_model_pick__: option.label as string,
+      base_model_billbee_product_id: Number(option.value),
+      supplier_sku: formSpecial.getFieldValue("supplier_sku") ?? full.external_sku ?? undefined,
+      unit_price_net: formSpecial.getFieldValue("unit_price_net") ?? full.net_purchase_price ?? undefined,
+      details_override: allow ? full.purchase_details ?? undefined : current,
+    } as any);
+  };
 
   const hydrateProductCache = React.useCallback(
     async (ids: number[]) => {
@@ -631,14 +541,13 @@ const onSelectBaseModel = async (_: string, option: Option) => {
       // Nur Felder, die nicht statusrelevant sind, gehen direkt per Update
       const payload: PoUpdate = {
         supplier_id: v.supplier_id!,
-
         invoice_number: v.invoice_number ?? null,
         invoice_date: fromDate(v.invoice_date as any),
         shipping_cost_net: v.shipping_cost_net ?? 0,
-                separate_invoice_for_shipping_cost:
+        separate_invoice_for_shipping_cost:
           typeof v.separate_invoice_for_shipping_cost === "boolean"
-          ? v.separate_invoice_for_shipping_cost
-          : null,
+            ? v.separate_invoice_for_shipping_cost
+            : null,
         notes: v.notes ?? null,
       };
       const { error } = await supabase.from("app_purchase_orders").update(payload).eq("id", id);
@@ -665,7 +574,6 @@ const onSelectBaseModel = async (_: string, option: Option) => {
   const handlePoStatusChange = (next: Po["status"]) => {
     const current = form.getFieldValue("status") as Po["status"] | undefined;
 
-    // Wechsel auf "confirmed" → DOL-Dialog & RPC
     if (next === "confirmed") {
       const lead = getSupplierLeadtimeDays();
       let picked: Dayjs | null = dayjs().add(lead, "day");
@@ -677,18 +585,13 @@ const onSelectBaseModel = async (_: string, option: Option) => {
             <p className="mb-2">
               Vorschlag: <b>{dayjs().add(lead, "day").format("DD.MM.YYYY")}</b> (heute + {lead} Tage Leadtime)
             </p>
-            <DatePicker
-              className="w-full"
-              defaultValue={dayjs().add(lead, "day")}
-              onChange={(d) => (picked = d ?? null)}
-            />
+            <DatePicker className="w-full" defaultValue={dayjs().add(lead, "day")} onChange={(d) => (picked = d ?? null)} />
           </div>
         ),
         okText: "Übernehmen & bestätigen",
         cancelText: "Abbrechen",
         async onOk() {
-          const dateStr =
-            picked ? picked.format("YYYY-MM-DD") : dayjs().add(lead, "day").format("YYYY-MM-DD");
+          const dateStr = picked ? picked.format("YYYY-MM-DD") : dayjs().add(lead, "day").format("YYYY-MM-DD");
 
           const { error } = await supabase.rpc("rpc_po_set_status", {
             p_po_id: id,
@@ -763,7 +666,6 @@ const onSelectBaseModel = async (_: string, option: Option) => {
             message.success("DOL aktualisiert");
           }}
         />
-        {/* Verzögerung berechnen und anzeigen */}
         {(row as any).dol_actual_at &&
           (row as any).dol_planned_at &&
           dayjs((row as any).dol_actual_at).isAfter(dayjs((row as any).dol_planned_at)) && (
@@ -775,12 +677,14 @@ const onSelectBaseModel = async (_: string, option: Option) => {
     );
   };
 
+  const s = form.getFieldValue("status") as Po["status"] | undefined;
+  const isConfirmedOrBeyond =
+    !!s && ["confirmed", "partially_in_production", "in_production", "partially_delivered", "delivered"].includes(s);
+  const isBeforeConfirmed = !!s && (s === "draft" || s === "ordered");
+
   // -------- Batch-Menü (Status-Updates) --------
   const batchMenu = (kind: "normal" | "special") => {
     const ids = kind === "normal" ? selectedNormalKeys : selectedSpecialKeys;
-
-
-
 
     const setBatchStatus = async (next: ItemStatus) => {
       if (!ids.length) {
@@ -793,64 +697,42 @@ const onSelectBaseModel = async (_: string, option: Option) => {
         return { items: [] };
       }
 
-      if (next === "cancelled") {
-          Modal.confirm({
-            title: "Ausgewählte Positionen stornieren?",
-            content: "Achtung: Dieser Schritt kann nicht rückgängig gemacht werden.",
-            okText: "Ja, stornieren",
-            okButtonProps: { danger: true },
-            cancelText: "Abbrechen",
-            async onOk() {
-              await doBatch();
-            },
-          });
+      const doBatch = async () => {
+        const { data, error } = await supabase.rpc("rpc_po_bulk_item_status", {
+          p_po_id: id,
+          p_item_ids: ids as string[],
+          p_next: next,
+        });
+        if (error) {
+          message.error(error.message);
           return;
         }
-        await doBatch();
-
-        async function doBatch() {
-          const { data, error } = await supabase.rpc("rpc_po_bulk_item_status", {
-            p_po_id: id,
-            p_item_ids: ids as string[],
-            p_next: next,
-          });
-          if (error) {
-            message.error(error.message);
-            return;
-          }
-          await refreshPositions();
-          if (kind === "normal") setSelectedNormalKeys([]);
-          else setSelectedSpecialKeys([]);
-          const fails = (data?.fail as any[]) || [];
-          if (fails.length) {
-            message.warning(`${ids.length - fails.length} Position(en) aktualisiert, ${fails.length} mit Fehlern.`);
-          } else {
-            message.success(`${ids.length} Position(en) auf "${ITEM_STATUS_META[next].label}" gesetzt`);
-          }
+        await refreshPositions();
+        if (kind === "normal") setSelectedNormalKeys([]);
+        else setSelectedSpecialKeys([]);
+        const fails = (data?.fail as any[]) || [];
+        if (fails.length) {
+          message.warning(`${ids.length - fails.length} Position(en) aktualisiert, ${fails.length} mit Fehlern.`);
+        } else {
+          message.success(`${ids.length} Position(en) auf "${ITEM_STATUS_META[next].label}" gesetzt`);
         }
+      };
 
-      const { data, error } = await supabase.rpc("rpc_po_bulk_item_status", {
-        p_po_id: id,
-        p_item_ids: ids as string[],
-        p_next: next,
-      });
-
-      if (error) {
-        message.error(error.message);
+      if (next === "cancelled") {
+        Modal.confirm({
+          title: "Ausgewählte Positionen stornieren?",
+          content: "Achtung: Dieser Schritt kann nicht rückgängig gemacht werden.",
+          okText: "Ja, stornieren",
+          okButtonProps: { danger: true },
+          cancelText: "Abbrechen",
+          async onOk() {
+            await doBatch();
+          },
+        });
         return;
       }
 
-      await refreshPositions();
-      if (kind === "normal") setSelectedNormalKeys([]);
-      else setSelectedSpecialKeys([]);
-
-      // Kleine Auswertung: falls es Fehlschläge gibt
-      const fails = (data?.fail as any[]) || [];
-      if (fails.length) {
-        message.warning(`${ids.length - fails.length} Position(en) aktualisiert, ${fails.length} mit Fehlern.`);
-      } else {
-        message.success(`${ids.length} Position(en) auf "${ITEM_STATUS_META[next].label}" gesetzt`);
-      }
+      await doBatch();
     };
 
     const statusChoices = (Object.keys(ITEM_STATUS_META) as ItemStatus[])
@@ -863,16 +745,6 @@ const onSelectBaseModel = async (_: string, option: Option) => {
 
     return { items: statusChoices };
   };
-
-  const s = form.getFieldValue("status") as Po["status"] | undefined;
-  // -------- UI: Statusabhängige Sperren --------
-  const isConfirmedOrBeyond = (() => {
-    return !!s && ["confirmed", "partially_in_production", "in_production", "partially_delivered", "delivered"].includes(s);
-  })();
-
-  const isBeforeConfirmed = !!s && (s === "draft" || s === "ordered");
-
-  
 
   // ------- Tabellen-Definitionen -------
   const columnsNormal = [
@@ -904,7 +776,7 @@ const onSelectBaseModel = async (_: string, option: Option) => {
       title: "Menge",
       width: 110,
       render: (_: any, r: PosNormal) =>
-        editingId === r.id ? (
+        editingId === r.id && !isConfirmedOrBeyond ? (
           <InputNumber
             value={editBuf.qty_ordered}
             onChange={(v) => setEditBuf((s) => ({ ...s, qty_ordered: Number(v) }))}
@@ -920,7 +792,7 @@ const onSelectBaseModel = async (_: string, option: Option) => {
       title: "Einzel Netto",
       width: 140,
       render: (_: any, r: PosNormal) =>
-        editingId === r.id ? (
+        editingId === r.id && !isConfirmedOrBeyond ? (
           <InputNumber
             value={editBuf.unit_price_net as number | null | undefined}
             onChange={(v) =>
@@ -942,13 +814,13 @@ const onSelectBaseModel = async (_: string, option: Option) => {
       width: 140,
       render: (_: any, r: PosNormal) => {
         const qty =
-          editingId === r.id
+          editingId === r.id && !isConfirmedOrBeyond
             ? typeof editBuf.qty_ordered === "number"
               ? editBuf.qty_ordered
               : 0
             : (r.qty_ordered as number);
         const price =
-          editingId === r.id
+          editingId === r.id && !isConfirmedOrBeyond
             ? typeof editBuf.unit_price_net === "number"
               ? editBuf.unit_price_net
               : 0
@@ -956,32 +828,30 @@ const onSelectBaseModel = async (_: string, option: Option) => {
         return <Text>{(qty * (price || 0)).toFixed(2)}</Text>;
       },
     },
-   {
-  title: "Versand anteilig",
-  width: 140,
-  render: (_: any, r: PosNormal) => {
-    const ship = Number((r as any).shipping_costs_proportional ?? 0);
-    return <Text>{formatEUR(ship)}</Text>;
-  },
-},
-{
-  // Optional: Anschaffungskosten pro Position (Summe + anteiliger Versand)
-  title: "Anschaffung (netto)",
-  width: 160,
-  render: (_: any, r: PosNormal) => {
-    const qty = Number(r.qty_ordered ?? 0);
-    const unit = Number(r.unit_price_net ?? 0);
-    const line = qty * unit;
-    const ship = Number((r as any).shipping_costs_proportional ?? 0);
-    const acq = line + ship;
-    return (
-      <Tooltip title={`Zeile: ${formatEUR(line)} + Versand: ${formatEUR(ship)}`}>
-        <Text strong>{formatEUR(acq)}</Text>
-      </Tooltip>
-    );
-  },
-},
-
+    {
+      title: "Versand anteilig",
+      width: 140,
+      render: (_: any, r: PosNormal) => {
+        const ship = Number((r as any).shipping_costs_proportional ?? 0);
+        return <Text>{formatEUR(ship)}</Text>;
+      },
+    },
+    {
+      title: "Anschaffung (netto)",
+      width: 160,
+      render: (_: any, r: PosNormal) => {
+        const qty = Number(r.qty_ordered ?? 0);
+        const unit = Number(r.unit_price_net ?? 0);
+        const line = qty * unit;
+        const ship = Number((r as any).shipping_costs_proportional ?? 0);
+        const acq = line + ship;
+        return (
+          <Tooltip title={`Zeile: ${formatEUR(line)} + Versand: ${formatEUR(ship)}`}>
+            <Text strong>{formatEUR(acq)}</Text>
+          </Tooltip>
+        );
+      },
+    },
     {
       title: "Verladung erwartet (DoL)",
       width: 240,
@@ -1023,16 +893,15 @@ const onSelectBaseModel = async (_: string, option: Option) => {
           message.success("Status aktualisiert");
         };
 
-
         return (
           <Dropdown
             trigger={["click"]}
-            disabled={isBeforeConfirmed} // NEU: vor Bestätigung gesperrt
+            disabled={isBeforeConfirmed}
             menu={{
               items: (Object.keys(ITEM_STATUS_META) as ItemStatus[]).map((k) => ({
                 key: k,
                 label: ITEM_STATUS_META[k].label,
-                onClick: () => confirmAndUpdateStatus(k), // siehe unten
+                onClick: () => confirmAndUpdateStatus(k),
               })),
             }}
           >
@@ -1040,7 +909,6 @@ const onSelectBaseModel = async (_: string, option: Option) => {
               {meta.icon} {meta.label}
             </Tag>
           </Dropdown>
-
         );
       },
     },
@@ -1060,7 +928,7 @@ const onSelectBaseModel = async (_: string, option: Option) => {
     },
     {
       title: "Aktionen",
-      width: 120,
+      width: 140,
       fixed: "right" as const,
       render: (_: any, r: PosNormal) =>
         editingId === r.id ? (
@@ -1074,9 +942,17 @@ const onSelectBaseModel = async (_: string, option: Option) => {
           </Space>
         ) : (
           <Space size="small">
-            <Button size="small" onClick={() => startEdit(r)} disabled={isConfirmedOrBeyond}>
-              <EditOutlined />
-            </Button>
+            <Tooltip
+              title={
+                isConfirmedOrBeyond
+                  ? "Bestätigt: Nur Anmerkungen sind editierbar."
+                  : "Bearbeiten"
+              }
+            >
+              <Button size="small" onClick={() => startEdit(r)}>
+                <EditOutlined />
+              </Button>
+            </Tooltip>
             <Button
               danger
               size="small"
@@ -1233,31 +1109,29 @@ const onSelectBaseModel = async (_: string, option: Option) => {
       },
     },
     {
-  title: "Versand anteilig",
-  width: 140,
-  render: (_: any, r: PosNormal) => {
-    const ship = Number((r as any).shipping_costs_proportional ?? 0);
-    return <Text>{formatEUR(ship)}</Text>;
-  },
-},
-{
-  // Optional: Anschaffungskosten pro Position (Summe + anteiliger Versand)
-  title: "Anschaffung (netto)",
-  width: 160,
-  render: (_: any, r: PosNormal) => {
-    const qty = Number(r.qty_ordered ?? 0);
-    const unit = Number(r.unit_price_net ?? 0);
-    const line = qty * unit;
-    const ship = Number((r as any).shipping_costs_proportional ?? 0);
-    const acq = line + ship;
-    return (
-      <Tooltip title={`Zeile: ${formatEUR(line)} + Versand: ${formatEUR(ship)}`}>
-        <Text strong>{formatEUR(acq)}</Text>
-      </Tooltip>
-    );
-  },
-},
-
+      title: "Versand anteilig",
+      width: 140,
+      render: (_: any, r: PosSpecial) => {
+        const ship = Number((r as any).shipping_costs_proportional ?? 0);
+        return <Text>{formatEUR(ship)}</Text>;
+      },
+    },
+    {
+      title: "Anschaffung (netto)",
+      width: 160,
+      render: (_: any, r: PosSpecial) => {
+        const qty = Number(r.qty_ordered ?? 0);
+        const unit = Number(r.unit_price_net ?? 0);
+        const line = qty * unit;
+        const ship = Number((r as any).shipping_costs_proportional ?? 0);
+        const acq = line + ship;
+        return (
+          <Tooltip title={`Zeile: ${formatEUR(line)} + Versand: ${formatEUR(ship)}`}>
+            <Text strong>{formatEUR(acq)}</Text>
+          </Tooltip>
+        );
+      },
+    },
     {
       title: "Verladung erwartet (DoL)",
       width: 240,
@@ -1299,26 +1173,41 @@ const onSelectBaseModel = async (_: string, option: Option) => {
           message.success("Status aktualisiert");
         };
 
-
         return (
-      <Dropdown
-        trigger={["click"]}
-        disabled={isBeforeConfirmed} // NEU: vor Bestätigung gesperrt
-        menu={{
-          items: (Object.keys(ITEM_STATUS_META) as ItemStatus[]).map((k) => ({
-            key: k,
-            label: ITEM_STATUS_META[k].label,
-            onClick: () => confirmAndUpdateStatus(k), // siehe unten
-          })),
-        }}
-      >
-  <Tag color={meta.color} style={{ cursor: isBeforeConfirmed ? "not-allowed" : "pointer" }}>
-    {meta.icon} {meta.label}
-  </Tag>
-</Dropdown>
-
+          <Dropdown
+            trigger={["click"]}
+            disabled={isBeforeConfirmed}
+            menu={{
+              items: (Object.keys(ITEM_STATUS_META) as ItemStatus[]).map((k) => ({
+                key: k,
+                label: ITEM_STATUS_META[k].label,
+                onClick: () => confirmAndUpdateStatus(k),
+              })),
+            }}
+          >
+            <Tag color={meta.color} style={{ cursor: isBeforeConfirmed ? "not-allowed" : "pointer" }}>
+              {meta.icon} {meta.label}
+            </Tag>
+          </Dropdown>
         );
       },
+    },
+    {
+      // NEU: AB-Ref inline bearbeitbar
+      title: "AB-Ref",
+      width: 160,
+      render: (_: any, r: PosSpecial) =>
+        editingSpecialId === r.id ? (
+          <Input
+            value={editBufSpecial.order_confirmation_ref ?? ""}
+            onChange={(e) =>
+              setEditBufSpecial((s) => ({ ...s, order_confirmation_ref: e.target.value }))
+            }
+            placeholder="AB-Referenz"
+          />
+        ) : (
+          cellEllipsis(r.order_confirmation_ref ?? "—", r.order_confirmation_ref ?? "—")
+        ),
     },
     {
       title: "Dokumente",
@@ -1345,12 +1234,6 @@ const onSelectBaseModel = async (_: string, option: Option) => {
         ) : (
           <Text type="secondary">—</Text>
         ),
-    },
-    {
-      title: "AB-Ref",
-      width: 160,
-      render: (_: any, r: PosSpecial) =>
-        cellEllipsis(r.order_confirmation_ref ?? "—", r.order_confirmation_ref ?? "—"),
     },
     {
       title: "Aktionen",
@@ -1406,17 +1289,21 @@ const onSelectBaseModel = async (_: string, option: Option) => {
     setEditBuf({});
   };
   const saveEdit = async (row: PosNormal) => {
-    const qty = typeof editBuf.qty_ordered === "number" ? editBuf.qty_ordered : 0;
-    const price =
-      typeof editBuf.unit_price_net === "number" || editBuf.unit_price_net === null
-        ? editBuf.unit_price_net
-        : 0;
-
-    const payload: Partial<PosNormal> = {
-      qty_ordered: qty,
-      unit_price_net: (price as number) ?? 0.0,
-      internal_notes: (editBuf.internal_notes ?? "") === "" ? null : editBuf.internal_notes ?? null,
-    };
+    // Wenn confirmed oder weiter: nur Notizen übernehmen
+    const payload: Partial<PosNormal> = isConfirmedOrBeyond
+      ? {
+          internal_notes:
+            (editBuf.internal_notes ?? "") === "" ? null : editBuf.internal_notes ?? null,
+        }
+      : {
+          qty_ordered: typeof editBuf.qty_ordered === "number" ? editBuf.qty_ordered : 0,
+          unit_price_net:
+            typeof editBuf.unit_price_net === "number" || editBuf.unit_price_net === null
+              ? (editBuf.unit_price_net as number) ?? 0.0
+              : 0.0,
+          internal_notes:
+            (editBuf.internal_notes ?? "") === "" ? null : editBuf.internal_notes ?? null,
+        };
 
     const { error } = await supabase
       .from("app_purchase_orders_positions_normal")
@@ -1458,21 +1345,15 @@ const onSelectBaseModel = async (_: string, option: Option) => {
           ? (editBufSpecial.unit_price_net as number | 0.0)
           : row.unit_price_net ?? null,
       details_override:
-        (editBufSpecial.details_override ?? "") === ""
-          ? null
-          : (editBufSpecial.details_override as string | null),
+        (editBufSpecial.details_override ?? "") === "" ? null : (editBufSpecial.details_override as string | null),
       supplier_sku:
-        (editBufSpecial.supplier_sku ?? "") === ""
-          ? null
-          : (editBufSpecial.supplier_sku as string | null),
+        (editBufSpecial.supplier_sku ?? "") === "" ? null : (editBufSpecial.supplier_sku as string | null),
       order_confirmation_ref:
         (editBufSpecial.order_confirmation_ref ?? "") === ""
           ? null
           : (editBufSpecial.order_confirmation_ref as string | null),
       external_file_url:
-        (editBufSpecial.external_file_url ?? "") === ""
-          ? null
-          : (editBufSpecial.external_file_url as string | null),
+        (editBufSpecial.external_file_url ?? "") === "" ? null : (editBufSpecial.external_file_url as string | null),
     };
 
     const { error } = await supabase
@@ -1490,6 +1371,56 @@ const onSelectBaseModel = async (_: string, option: Option) => {
     cancelEditSpecial();
   };
 
+  // -------- Summen / Auswertung --------
+  const sumNormal = posNormal.reduce(
+    (acc, r) => acc + Number(r.qty_ordered ?? 0) * Number(r.unit_price_net ?? 0),
+    0,
+  );
+  const sumSpecial = posSpecial.reduce(
+    (acc, r) => acc + Number(r.qty_ordered ?? 0) * Number(r.unit_price_net ?? 0),
+    0,
+  );
+  const sumPositions = sumNormal + sumSpecial;
+
+  const shipping = Number(form.getFieldValue("shipping_cost_net") ?? 0);
+  const separateInvoice = Boolean(form.getFieldValue("separate_invoice_for_shipping_cost"));
+  const shippingOnInvoice = separateInvoice ? 0 : shipping;
+  const ancillaryCosts = separateInvoice ? shipping : 0;
+  const invoiceSum = sumPositions + shippingOnInvoice;
+  const acquisitionCost = invoiceSum + ancillaryCosts;
+
+  const isActiveItem = (p: any) => {
+    const s = effectiveItemStatus(p);
+    return s !== "paused" && s !== "cancelled";
+  };
+
+  const pausedNormal = posNormal.filter((p) => effectiveItemStatus(p) === "paused").length;
+  const pausedSpecial = posSpecial.filter((p) => effectiveItemStatus(p) === "paused").length;
+  const cancelledNormal = posNormal.filter((p) => effectiveItemStatus(p) === "cancelled").length;
+  const cancelledSpecial = posSpecial.filter((p) => effectiveItemStatus(p) === "cancelled").length;
+  const pausedTotal = pausedNormal + pausedSpecial;
+  const cancelledTotal = cancelledNormal + cancelledSpecial;
+
+  const normalActive = posNormal.filter(isActiveItem);
+  const specialActive = posSpecial.filter(isActiveItem);
+  const totalActiveNormal = normalActive.length;
+  const totalActiveSpecial = specialActive.length;
+  const totalActivePositions = totalActiveNormal + totalActiveSpecial;
+
+  const deliveredActiveNormal = normalActive.filter((p) => effectiveItemStatus(p) === "delivered").length;
+  const deliveredActiveSpecial = specialActive.filter((p) => effectiveItemStatus(p) === "delivered").length;
+  const deliveredActiveTotal = deliveredActiveNormal + deliveredActiveSpecial;
+  const deliveredPercent = totalActivePositions ? Math.round((deliveredActiveTotal / totalActivePositions) * 100) : 0;
+
+  const sketchRequired = specialActive.filter((p) => Boolean(p.sketch_needed)).length;
+  const sketchConfirmed = specialActive.filter((p) => Boolean(p.sketch_needed) && p.sketch_confirmed_at).length;
+  const sketchPercent = sketchRequired ? Math.round((sketchConfirmed / sketchRequired) * 100) : 0;
+
+  const dolPlanned = form.getFieldValue("dol_planned_at") as Dayjs | undefined;
+  const dolActual = form.getFieldValue("dol_actual_at") as Dayjs | undefined;
+  const hasDelay = dolPlanned && dolActual && dolActual.isAfter(dolPlanned);
+  const delayDays = hasDelay ? dolActual!.diff(dolPlanned!, "day") : 0;
+
   return (
     <App>
       <div className="p-4">
@@ -1500,7 +1431,7 @@ const onSelectBaseModel = async (_: string, option: Option) => {
           <Col>
             <Button onClick={() => router.push("/einkauf/bestellungen")}>zur Übersicht</Button>
           </Col>
-        </Row>        
+        </Row>
 
         <Tabs
           defaultActiveKey="main"
@@ -1511,18 +1442,12 @@ const onSelectBaseModel = async (_: string, option: Option) => {
               children: (
                 <Card loading={loading}>
                   <Form form={form} layout="vertical">
-
-                    {/* --- Prozess-Schritte (statt DatePickers) --- */}
+                    {/* --- Prozess-Schritte --- */}
                     <Row className="mb-3">
                       <Col span={24}>
                         <Steps
                           current={statusToStepIndex(form.getFieldValue("status"))}
-                          items={[
-                            { title: "Entwurf" },
-                            { title: "Bestellt" },
-                            { title: "Bestätigt" },
-                            { title: "Geliefert" },
-                          ]}
+                          items={[{ title: "Entwurf" }, { title: "Bestellt" }, { title: "Bestätigt" }, { title: "Geliefert" }]}
                         />
                         {form.getFieldValue("status") === "cancelled" && (
                           <div style={{ marginTop: 8 }}>
@@ -1540,11 +1465,7 @@ const onSelectBaseModel = async (_: string, option: Option) => {
                         </Form.Item>
                       </Col>
                       <Col xs={24} md={8}>
-                        <Form.Item
-                          label="Lieferant"
-                          name="supplier_id"
-                          rules={[{ required: true, message: "Pflichtfeld" }]}
-                        >
+                        <Form.Item label="Lieferant" name="supplier_id" rules={[{ required: true, message: "Pflichtfeld" }]}>
                           <Select
                             showSearch
                             optionFilterProp="label"
@@ -1565,18 +1486,13 @@ const onSelectBaseModel = async (_: string, option: Option) => {
                         </Form.Item>
                       </Col>
                       <Col xs={24} md={8}>
-                        <Form.Item
-                          label="Status"
-                          name="status"
-                          rules={[{ required: true, message: "Pflichtfeld" }]}
-                        >
+                        <Form.Item label="Status" name="status" rules={[{ required: true, message: "Pflichtfeld" }]}>
                           <Select options={STATUS_OPTIONS as any} onChange={handlePoStatusChange} />
                         </Form.Item>
                       </Col>
                     </Row>
 
-
-                    {/* --- Rechnungsdaten / Versandkosten / Notizen (eine Reihe nach oben geschoben) --- */}
+                    {/* --- Rechnungsdaten / Versandkosten / Notizen --- */}
                     <Row gutter={12}>
                       <Col xs={24} md={6}>
                         <Form.Item label="Rechnungsnr." name="invoice_number">
@@ -1611,7 +1527,7 @@ const onSelectBaseModel = async (_: string, option: Option) => {
                         </Form.Item>
                       </Col>
                     </Row>
-                    
+
                     {/* --- Fuß: Speichern / Zurück --- */}
                     <div style={{ marginTop: 16 }} />
                     <Row justify="end">
@@ -1626,7 +1542,6 @@ const onSelectBaseModel = async (_: string, option: Option) => {
 
                     {/* --- Auswertung --- */}
                     <Row gutter={[12, 12]}>
-                      {/* Linke Spalte: Beträge & Aufschlüsselung */}
                       <Col>
                         <Card size="small" title="Rechnungs-/Kostenübersicht">
                           <div style={{ display: "grid", gridTemplateColumns: "1fr auto", rowGap: 6 }}>
@@ -1635,25 +1550,22 @@ const onSelectBaseModel = async (_: string, option: Option) => {
                                 <Text>Summe Positionen</Text>
                               </Row>
                               <Row>
-                              <Text>
-                                + Versandkosten <Text type="secondary">(auf Rechnung)</Text>
-                              </Text>
+                                <Text>
+                                  + Versandkosten <Text type="secondary">(auf Rechnung)</Text>
+                                </Text>
                               </Row>
                               <Row>
-                              <Divider style={{ margin: "8px 0" }} />
-
-                              <Text strong>Rechnungssumme</Text>
+                                <Divider style={{ margin: "8px 0" }} />
+                                <Text strong>Rechnungssumme</Text>
                               </Row>
                               <Row>
-                              <Text>
-                                + Anschaffungsnebenkosten{" "}
-                                <Text type="secondary">(Versandkosten bei separater Rechnung)</Text>
-                              </Text>
+                                <Text>
+                                  + Anschaffungsnebenkosten <Text type="secondary">(Versandkosten bei separater Rechnung)</Text>
+                                </Text>
                               </Row>
                               <Row>
-                              <Divider style={{ margin: "8px 0" }} />
-
-                              <Text strong>Anschaffungskosten</Text>
+                                <Divider style={{ margin: "8px 0" }} />
+                                <Text strong>Anschaffungskosten</Text>
                               </Row>
                             </Col>
                             <Col>
@@ -1661,18 +1573,18 @@ const onSelectBaseModel = async (_: string, option: Option) => {
                                 <Text strong>{formatEUR(sumPositions)}</Text>
                               </Row>
                               <Row>
-                              <Text strong>{formatEUR(shippingOnInvoice)}</Text>
+                                <Text strong>{formatEUR(shippingOnInvoice)}</Text>
                               </Row>
                               <Row>
-                              <Divider style={{ margin: "8px 0" }} />
-                              <Text strong>{formatEUR(invoiceSum)}</Text>
+                                <Divider style={{ margin: "8px 0" }} />
+                                <Text strong>{formatEUR(invoiceSum)}</Text>
                               </Row>
                               <Row>
-                              <Text strong>{formatEUR(ancillaryCosts)}</Text>
+                                <Text strong>{formatEUR(ancillaryCosts)}</Text>
                               </Row>
                               <Row>
-                              <Divider style={{ margin: "8px 0" }} />
-                              <Text strong>{formatEUR(acquisitionCost)}</Text>
+                                <Divider style={{ margin: "8px 0" }} />
+                                <Text strong>{formatEUR(acquisitionCost)}</Text>
                               </Row>
                             </Col>
                           </div>
@@ -1699,12 +1611,8 @@ const onSelectBaseModel = async (_: string, option: Option) => {
                             </Col>
 
                             <Col>
-                                <div style={{ textAlign: "center" }}>
-                                <Progress
-                                  type="circle"
-                                  percent={sketchPercent}
-                                  status={sketchConfirmed === sketchRequired ? "success" : "active"}
-                                />
+                              <div style={{ textAlign: "center" }}>
+                                <Progress type="circle" percent={sketchPercent} status={sketchConfirmed === sketchRequired ? "success" : "active"} />
                                 <div style={{ marginTop: 8 }}>
                                   <Text>
                                     Skizzen bestätigt:&nbsp;
@@ -1714,7 +1622,6 @@ const onSelectBaseModel = async (_: string, option: Option) => {
                                   </Text>
                                 </div>
                               </div>
-
                             </Col>
                           </Row>
 
@@ -1739,17 +1646,15 @@ const onSelectBaseModel = async (_: string, option: Option) => {
                             </div>
                           )}
                         </Card>
-
                       </Col>
 
-                      {/* Verspätungs-Hinweis */}
                       {hasDelay && (
                         <Col span={24}>
                           <Alert
                             type="warning"
-                            message={`Verspätung: ${delayDays} Tage (geplant: ${dolPlanned!.format(
+                            message={`Verspätung: ${delayDays} Tage (geplant: ${dolPlanned!.format("DD.MM.YYYY")}, tatsächlich: ${dolActual!.format(
                               "DD.MM.YYYY",
-                            )}, tatsächlich: ${dolActual!.format("DD.MM.YYYY")})`}
+                            )})`}
                             showIcon
                           />
                         </Col>
@@ -1757,8 +1662,7 @@ const onSelectBaseModel = async (_: string, option: Option) => {
                     </Row>
                   </Form>
                 </Card>
-              )
-
+              ),
             },
             {
               key: "pos",
@@ -1767,7 +1671,11 @@ const onSelectBaseModel = async (_: string, option: Option) => {
                 <div>
                   {/* Normale Positionen */}
                   <Card
-                    title={<Space><span>Normale Positionen</span></Space>}
+                    title={
+                      <Space>
+                        <span>Normale Positionen</span>
+                      </Space>
+                    }
                     className="mb-4"
                     extra={
                       <Space>
@@ -1793,7 +1701,7 @@ const onSelectBaseModel = async (_: string, option: Option) => {
                       }}
                       columns={columnsNormal as any}
                       tableLayout="fixed"
-                      scroll={{ x: 1400 }}
+                      scroll={{ x: 1450 }}
                       style={{ wordBreak: "break-word" }}
                       rowSelection={{
                         selectedRowKeys: selectedNormalKeys,
@@ -1810,7 +1718,25 @@ const onSelectBaseModel = async (_: string, option: Option) => {
                         <Dropdown menu={batchMenu("special")} trigger={["click"]}>
                           <Button size="small">Batch</Button>
                         </Dropdown>
-                        <Button onClick={() => setOpenSpecial(true)} disabled={isConfirmedOrBeyond}>
+                        <Button
+                          onClick={() => {
+                            setOpenSpecial(true);
+                            // Beim erneuten Öffnen: SB-Produkt aus Merker vorbelegen, Grundmodell leeren
+                            formSpecial.setFieldsValue({
+                              billbee_product_id: lastSpecialSbProductId ?? undefined,
+                              __base_model_pick__: undefined,
+                              base_model_billbee_product_id: undefined,
+                            });
+                            if (lastSpecialSbProductId) {
+                              const full = productCache[lastSpecialSbProductId];
+                              setSelectedFullSpecial(full ?? null);
+                            } else {
+                              setSelectedFullSpecial(null);
+                            }
+                            setSelectedBaseModel(null);
+                          }}
+                          disabled={isConfirmedOrBeyond}
+                        >
                           + Hinzufügen
                         </Button>
                       </Space>
@@ -1829,7 +1755,7 @@ const onSelectBaseModel = async (_: string, option: Option) => {
                       }}
                       columns={columnsSpecial as any}
                       tableLayout="fixed"
-                      scroll={{ x: 1500 }}
+                      scroll={{ x: 1550 }}
                       style={{ wordBreak: "break-word" }}
                       rowSelection={{
                         selectedRowKeys: selectedSpecialKeys,
@@ -1893,12 +1819,8 @@ const onSelectBaseModel = async (_: string, option: Option) => {
                 <Descriptions.Item label="SKU">{selectedFullNormal.sku ?? "—"}</Descriptions.Item>
                 <Descriptions.Item label="Hersteller">{selectedFullNormal.manufacturer ?? "—"}</Descriptions.Item>
                 <Descriptions.Item label="Ext. SKU">{selectedFullNormal.external_sku ?? "—"}</Descriptions.Item>
-                <Descriptions.Item label="Einkaufsdetails (Vorschlag)">
-                  {selectedFullNormal.purchase_details ?? "—"}
-                </Descriptions.Item>
-                <Descriptions.Item label="Letzter EK (Vorschlag)">
-                  {selectedFullNormal.net_purchase_price ?? "—"}
-                </Descriptions.Item>
+                <Descriptions.Item label="Einkaufsdetails (Vorschlag)">{selectedFullNormal.purchase_details ?? "—"}</Descriptions.Item>
+                <Descriptions.Item label="Letzter EK (Vorschlag)">{selectedFullNormal.net_purchase_price ?? "—"}</Descriptions.Item>
               </Descriptions>
             )}
 
@@ -1930,21 +1852,18 @@ const onSelectBaseModel = async (_: string, option: Option) => {
           open={openSpecial}
           onCancel={() => {
             setOpenSpecial(false);
-            setSelectedFullSpecial(null);
-            setSelectedBaseModel(null);
-            formSpecial.resetFields();
+            // absichtlich kein resetFields(); SB-Produkt bleibt im State gemerkt (lastSpecialSbProductId)
           }}
           onOk={async () => {
             try {
-              const v = await formSpecial.validateFields();
-              if (!v.base_model_billbee_product_id) {
-                return message.error("Bitte ein Grundmodell auswählen.");
-              }
+              // Nur SB-Produkt ist Pflicht (Grundmodell ist optional)
+              await formSpecial.validateFields(["billbee_product_id", "qty_ordered"]);
 
+              const v = formSpecial.getFieldsValue(true);
               const { error } = await supabase.rpc("rpc_po_add_item_special", {
                 p_po_id: id,
                 p_sb_product_id: v.billbee_product_id!,
-                p_base_model_id: v.base_model_billbee_product_id!,
+                p_base_model_id: v.base_model_billbee_product_id ?? null, // optional
                 p_qty: v.qty_ordered ?? 1,
                 p_unit_price: v.unit_price_net ?? null,
                 p_supplier_sku: v.supplier_sku ?? null,
@@ -1955,13 +1874,14 @@ const onSelectBaseModel = async (_: string, option: Option) => {
               });
               if (error) throw error;
 
+              // zuletzt verwendetes SB-Produkt merken
+              setLastSpecialSbProductId(v.billbee_product_id ?? null);
+
               await refreshPositions();
               setOpenSpecial(false);
-              setSelectedFullSpecial(null);
-              setSelectedBaseModel(null);
-              formSpecial.resetFields();
               message.success("Sonder-Position hinzugefügt");
             } catch (e: any) {
+              if (e?.errorFields) return; // Form-Fehler sind markiert
               message.error(e?.message ?? "Fehler beim Hinzufügen.");
             }
           }}
@@ -1969,28 +1889,55 @@ const onSelectBaseModel = async (_: string, option: Option) => {
           cancelText="Abbrechen"
         >
           <Form form={formSpecial} layout="vertical">
-            <Form.Item label='SB-Produkt wählen ("Sonder ...")' required>
+            {/* SB-Produkt (Pflicht) */}
+            <Form.Item
+              label='SB-Produkt wählen ("Sonder ...")'
+              name="billbee_product_id"
+              rules={[{ required: true, message: "Bitte ein SB-Produkt auswählen." }]}
+            >
               <AutoComplete
                 onSearch={(q) => searchProducts(q, "special")}
                 options={optionsSpecial}
-                onSelect={(_, o) => onSelectSpecial(_, o as any)}
+                onSelect={(_, o) => {
+                  onSelectSpecial(_, o as any);
+                  formSpecial.setFieldsValue({ billbee_product_id: Number((o as any).value) });
+                }}
                 placeholder='Elternartikel (Sonder …), gefiltert nach manufacturer'
                 notFoundContent={searchingSpecial ? "Suche..." : undefined}
                 className="w-full"
                 filterOption={false}
+                allowClear
+                onClear={() => {
+                  formSpecial.setFieldsValue({ billbee_product_id: undefined });
+                  setSelectedFullSpecial(null);
+                }}
               />
             </Form.Item>
 
-            <Form.Item label="Grundmodell wählen">
+            {/* Grundmodell (OPTIONAL) */}
+            <Form.Item label="Grundmodell wählen" name="__base_model_pick__">
               <AutoComplete
                 onSearch={(q) => searchProducts(q, "base")}
                 options={optionsBase}
                 onSelect={(_, o) => onSelectBaseModel(_, o as any)}
-                placeholder="Grundmodell (liefert Ext. SKU / EK / Details)"
+                placeholder="(Optional) Grundmodell für Ext. SKU / EK / Details"
                 notFoundContent={searchingBase ? "Suche..." : undefined}
                 className="w-full"
                 filterOption={false}
+                allowClear
+                onClear={() => {
+                  formSpecial.setFieldsValue({
+                    __base_model_pick__: undefined,
+                    base_model_billbee_product_id: undefined,
+                  });
+                  setSelectedBaseModel(null);
+                }}
               />
+            </Form.Item>
+
+            {/* Hidden ID für Grundmodell */}
+            <Form.Item name="base_model_billbee_product_id" hidden>
+              <InputNumber />
             </Form.Item>
 
             {(selectedFullSpecial || selectedBaseModel) && (
@@ -2001,9 +1948,7 @@ const onSelectBaseModel = async (_: string, option: Option) => {
                 {selectedBaseModel && (
                   <>
                     <Descriptions.Item label="Grundmodell SKU">{selectedBaseModel.sku ?? "—"}</Descriptions.Item>
-                    <Descriptions.Item label="Grundmodell Ext. SKU">
-                      {selectedBaseModel.external_sku ?? "—"}
-                    </Descriptions.Item>
+                    <Descriptions.Item label="Grundmodell Ext. SKU">{selectedBaseModel.external_sku ?? "—"}</Descriptions.Item>
                     <Descriptions.Item label="Details (Vorschlag)">{selectedBaseModel.purchase_details ?? "—"}</Descriptions.Item>
                     <Descriptions.Item label="EK (Vorschlag)">{selectedBaseModel.net_purchase_price ?? "—"}</Descriptions.Item>
                   </>
@@ -2011,15 +1956,7 @@ const onSelectBaseModel = async (_: string, option: Option) => {
               </Descriptions>
             )}
 
-            {/* Hidden IDs */}
-            <Form.Item name="billbee_product_id" hidden rules={[{ required: true }]}>
-              <InputNumber />
-            </Form.Item>
-            <Form.Item name="base_model_billbee_product_id" hidden>
-              <InputNumber />
-            </Form.Item>
-
-            {/* Überschreibbare Felder */}
+            {/* Eingabefelder */}
             <Row gutter={8}>
               <Col span={12}>
                 <Form.Item label="Menge" name="qty_ordered" initialValue={1} rules={[{ required: true }]}>
