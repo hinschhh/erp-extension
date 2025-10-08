@@ -1,16 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import {
-  Form,
-  Input,
-  Table,
-  Button,
-  Tooltip,
-  Typography,
-  Space,
-  Select,
-} from "antd";
+import { Table, Tooltip, Typography } from "antd";
 import {
   List,
   useTable,
@@ -18,8 +9,8 @@ import {
   getDefaultSortOrder,
   useSelect,
 } from "@refinedev/antd";
-import type { HttpError, CrudFilters } from "@refinedev/core";
-import type { FilterDropdownProps as AntdFilterDropdownProps, FilterConfirmProps } from "antd/es/table/interface";
+import type { HttpError } from "@refinedev/core";
+import { ColumnMultiSelectFilter, type ColumnFilterOption } from "@/components/common/table/ColumnMultiSelectFilter";
 
 /* ---------- Typen ---------- */
 type Row = {
@@ -37,10 +28,9 @@ type Row = {
 };
 
 type Search = { q?: string };
-type Option = { label: string; value: string };
 
 /* Dedupe & Null/Leer filtern */
-const dedupeOptions = (opts: Option[] = []): Option[] => {
+const dedupeOptions = (opts: ColumnFilterOption[] = []): ColumnFilterOption[] => {
   const seen = new Set<string>();
   return opts.filter((o) => {
     const v = o?.value;
@@ -53,26 +43,13 @@ const dedupeOptions = (opts: Option[] = []): Option[] => {
 };
 
 export default function BestellvorschlaegePage() {
-  const { tableProps, sorters, filters, searchFormProps } = useTable<Row, HttpError, Search>({
+  const { tableProps, sorters, filters } = useTable<Row, HttpError, Search>({
     resource: "rpt_products_inventory_purchasing",
     meta: { select: "*" },
     sorters: { initial: [{ field: "sku", order: "asc" }], mode: "server" },
     filters: { initial: [], mode: "server" },
     pagination: { pageSize: 100 },
     syncWithLocation: true,
-    onSearch: (values) => {
-      const crud: CrudFilters = [];
-      if (values.q?.trim()) {
-        crud.push({
-          operator: "or",
-          value: [
-            { field: "sku", operator: "contains", value: values.q.trim() },
-            { field: "supplier", operator: "contains", value: values.q.trim() },
-          ],
-        });
-      }
-      return crud;
-    },
   });
 
   /* ---------- useSelect: Optionen pro Spalte ---------- */
@@ -86,7 +63,7 @@ export default function BestellvorschlaegePage() {
     meta: { select: "sku" },
   });
   const skuOptions = useMemo(
-    () => dedupeOptions(((skuSelectProps.options as Option[]) ?? [])),
+    () => dedupeOptions((skuSelectProps.options ?? []) as ColumnFilterOption[]),
     [skuSelectProps.options],
   );
 
@@ -100,7 +77,7 @@ export default function BestellvorschlaegePage() {
     meta: { select: "inventory_category" },
   });
   const inventoryCategoryOptions = useMemo(
-    () => dedupeOptions(((invCatSelectProps.options as Option[]) ?? [])),
+    () => dedupeOptions((invCatSelectProps.options ?? []) as ColumnFilterOption[]),
     [invCatSelectProps.options],
   );
 
@@ -114,138 +91,92 @@ export default function BestellvorschlaegePage() {
     meta: { select: "supplier" },
   });
   const supplierOptions = useMemo(
-    () => dedupeOptions(((supplierSelectProps.options as Option[]) ?? [])),
+    () => dedupeOptions((supplierSelectProps.options ?? []) as ColumnFilterOption[]),
     [supplierSelectProps.options],
   );
 
-  const submit = () => searchFormProps.form?.submit();
-  const resetAndSubmit = () => {
-    searchFormProps.form?.resetFields();
-    Promise.resolve().then(() => searchFormProps.form?.submit());
-  };
-
-  /* ---- Hilfs-Renderer für AntD-custom filterDropdown (keine doppelten Buttons) ---- */
-  const renderMultiSelectDropdown =
-  (options: Option[]) =>
-  (fp: AntdFilterDropdownProps) => {
-    const handleApply = () =>
-      fp.confirm({ closeDropdown: true } as FilterConfirmProps);
-
-    const handleReset = () => {
-      fp.clearFilters?.();
-      fp.confirm({ closeDropdown: true } as FilterConfirmProps);
-    };
-
-    return (
-      <div style={{ padding: 8, width: 300 }}>
-        <Select
-          mode="multiple"
-          allowClear
-          showSearch
-          placeholder="Werte wählen…"
-          options={options}
-          value={fp.selectedKeys as string[]}
-          onChange={(vals) => fp.setSelectedKeys(vals as React.Key[])}
-          /* Enter = sofort anwenden */
-          onInputKeyDown={(e) => {
-            if (e.key === "Enter") handleApply();
-          }}
-          /* Clear = sofort anwenden */
-          onClear={handleReset}
-          style={{ width: "100%" }}
-          optionFilterProp="label"
-          maxTagCount="responsive"
-        />
-        <Space style={{ marginTop: 8 }}>
-          <Button type="primary" onClick={handleApply}>
-            Filtern
-          </Button>
-          <Button onClick={handleReset}>
-            Zurücksetzen
-          </Button>
-        </Space>
-      </div>
-    );
-  };
-
   return (
-    <>
-      <List
-        title="Bestellvorschläge">
-        {/* Top-Suchleiste (OR auf sku/supplier) */}
-        {/*<Form {...searchFormProps} layout="inline" style={{ marginBottom: 16 }}>
-          <Form.Item name="q" label="Suche">
-            <Input placeholder="SKU oder Lieferant…" allowClear onPressEnter={submit} />
-          </Form.Item>
-          <Space>
-            <Button onClick={submit} type="primary">Suchen</Button>
-            <Button onClick={resetAndSubmit}>Zurücksetzen</Button>
-          </Space>
-        </Form>*/}
+    <List title="Bestellvorschläge">
+      <Table
+        rowKey="billbee_product_id"
+        {...tableProps}
+        pagination={{
+          ...tableProps.pagination,
+          position: ["bottomRight"],
+          size: "small",
+          showSizeChanger: true,
+          pageSizeOptions: [50, 100, 250, 500],
+          showTotal: (t) => `${t} Einträge`,
+        }}
+        scroll={{ x: true }}
+      >
+        {/* SKU */}
+        <Table.Column<Row>
+          title="SKU"
+          dataIndex="sku"
+          sorter
+          defaultSortOrder={getDefaultSortOrder("sku", sorters)}
+          filteredValue={getDefaultFilter("sku", filters)}
+          filterDropdown={(fp) => (
+            <ColumnMultiSelectFilter
+              {...fp}
+              options={skuOptions}
+              placeholder="SKU wählen…"
+            />
+          )}
+          render={(v) => <Typography.Text code>{v ?? "—"}</Typography.Text>}
+        />
 
-        <Table
-          rowKey="billbee_product_id"
-          {...tableProps}
-          pagination={{
-            ...tableProps.pagination,
-            position: ["bottomRight"],
-            size: "small",
-            showSizeChanger: true,
-            pageSizeOptions: [50, 100, 250, 500],
-            showTotal: (t) => `${t} Einträge`,
-          }}
-          scroll={{ x: true }}
-        >
-          {/* SKU – Mehrfachfilter (IN) via AntD custom filterDropdown */}
-          <Table.Column<Row>
-            title="SKU"
-            dataIndex="sku"
-            sorter
-            defaultSortOrder={getDefaultSortOrder("sku", sorters)}
-            filteredValue={getDefaultFilter("sku", filters)}
-            filterDropdown={renderMultiSelectDropdown(skuOptions)}
-            render={(v) => <Typography.Text code>{v ?? "—"}</Typography.Text>}
-          />
+        {/* Inventur-Kategorie */}
+        <Table.Column<Row>
+          title="Inventur-Kategorie"
+          dataIndex="inventory_category"
+          sorter
+          filteredValue={getDefaultFilter("inventory_category", filters)}
+          filterDropdown={(fp) => (
+            <ColumnMultiSelectFilter
+              {...fp}
+              options={inventoryCategoryOptions}
+              placeholder="Kategorie wählen…"
+            />
+          )}
+        />
 
-          {/* Inventur-Kategorie – Mehrfachfilter (IN) */}
-          <Table.Column<Row>
-            title="Inventur-Kategorie"
-            dataIndex="inventory_category"
-            sorter
-            filteredValue={getDefaultFilter("inventory_category", filters)}
-            filterDropdown={renderMultiSelectDropdown(inventoryCategoryOptions)}
-          />
+        {/* Lieferant */}
+        <Table.Column<Row>
+          title="Lieferant"
+          dataIndex="supplier"
+          sorter={{ multiple: 1 }}
+          defaultSortOrder={getDefaultSortOrder("supplier", sorters)}
+          filteredValue={getDefaultFilter("supplier", filters)}
+          filterDropdown={(fp) => (
+            <ColumnMultiSelectFilter
+              {...fp}
+              options={supplierOptions}
+              placeholder="Lieferant wählen…"
+            />
+          )}
+        />
 
-          {/* Lieferant – Mehrfachfilter (IN) */}
-          <Table.Column<Row>
-            title="Lieferant"
-            dataIndex="supplier"
-            sorter={{ multiple: 1 }}
-            defaultSortOrder={getDefaultSortOrder("supplier", sorters)}
-            filteredValue={getDefaultFilter("supplier", filters)}
-            filterDropdown={renderMultiSelectDropdown(supplierOptions)}
-          />
+        <Table.Column<Row> title="Freier Lagerbestand" dataIndex="stock_free" />
+        <Table.Column<Row> title="Reservierter Bestand" dataIndex="stock_reserved_direct" />
+        <Table.Column<Row> title="Reserviert in Stücklisten" dataIndex="stock_reserved_bom" />
+        <Table.Column<Row> title="Nicht verfügbar" dataIndex="stock_unavailable" />
+        <Table.Column<Row> title="Physischer Bestand" dataIndex="stock_physical" />
+        <Table.Column<Row> title="Nachbestellter Bestand" dataIndex="stock_on_order" />
 
-          <Table.Column<Row> title="Freier Lagerbestand" dataIndex="stock_free" />
-          <Table.Column<Row> title="Reservierter Bestand" dataIndex="stock_reserved_direct" />
-          <Table.Column<Row> title="Reserviert in Stücklisten" dataIndex="stock_reserved_bom" />
-          <Table.Column<Row> title="Nicht verfügbar" dataIndex="stock_unavailable" />
-          <Table.Column<Row> title="Physischer Bestand" dataIndex="stock_physical" />
-          <Table.Column<Row> title="Nachbestellter Bestand" dataIndex="stock_on_order" />
+        <Table.Column<Row>
+          title="Verbrauch"
+          key="consumption_3m"
+          render={() => (
+            <Tooltip title="Rollierende 3-Monatssumme">
+              <span>—</span>
+            </Tooltip>
+          )}
+        />
 
-          <Table.Column<Row>
-            title="Verbrauch"
-            key="consumption_3m"
-            render={() => (
-              <Tooltip title="Rollierende 3-Monatssumme">
-                <span>—</span>
-              </Tooltip>
-            )}
-          />
-
-          <Table.Column<Row> title="aktualisiert am" dataIndex="updated_at" />
-        </Table>
-      </List>
-    </>
+        <Table.Column<Row> title="aktualisiert am" dataIndex="updated_at" />
+      </Table>
+    </List>
   );
 }
