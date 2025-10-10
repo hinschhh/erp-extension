@@ -6,6 +6,7 @@ import { useTable } from "@refinedev/antd";
 import { Table, Card, Space, Tag, Input, Button } from "antd";
 import type { Tables } from "@/types/supabase";
 import { EditOutlined, EyeOutlined } from "@ant-design/icons";
+import SyncReferenceProductsButton from "@/components/common/artikel/SyncReferenceProductsButton";
 
 type Row = Omit<Tables<"rpt_products_full">, "id"> & { id: number };
 
@@ -34,12 +35,15 @@ export default function ArtikelListPage() {
     <Card
       title="Artikel"
       extra={
+        <>
         <Input.Search
           placeholder="SKU, Name, Hersteller…"
           allowClear
           onSearch={setSearch}
           onChange={(e) => setSearch(e.target.value)}
         />
+        <SyncReferenceProductsButton refreshAfter />
+        </>
       }
     >
       <Table<Row>
