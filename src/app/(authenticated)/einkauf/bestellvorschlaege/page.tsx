@@ -96,7 +96,7 @@ export default function BestellvorschlaegePage() {
   );
 
   return (
-    <List title="Bestellvorschläge" contentProps={{ style: { height: "70vh", display: "flex", flexDirection: "column"} }}>
+    <List title="Bestellvorschläge">
       <Table
         rowKey="billbee_product_id"
         {...tableProps}
@@ -111,19 +111,21 @@ export default function BestellvorschlaegePage() {
         tableLayout="fixed"  
         sticky={{}}
         scroll={{
-          x: true,
+          x: "max-content",
+          y: "90vh",
         }}
         style={{
           flex: 1,
           overflow: "auto",
-          width: "100%",
+          height: "50%",
         }}
       >
         {/* SKU */}
         <Table.Column<Row>
           title="SKU"
           dataIndex="sku"
-          width={50} ellipsis
+          width={250} ellipsis
+          fixed="left"
           sorter
           defaultSortOrder={getDefaultSortOrder("sku", sorters)}
           filteredValue={getDefaultFilter("sku", filters)}
@@ -141,7 +143,7 @@ export default function BestellvorschlaegePage() {
         <Table.Column<Row>
           title="Inventur-Kategorie"
           dataIndex="inventory_category"
-          width={25} ellipsis
+          width={150} ellipsis
           sorter
           filteredValue={getDefaultFilter("inventory_category", filters)}
           filterDropdown={(fp) => (
@@ -157,7 +159,7 @@ export default function BestellvorschlaegePage() {
         <Table.Column<Row>
           title="Lieferant"
           dataIndex="supplier"
-          width={25} ellipsis
+          width={100} ellipsis
           sorter={{ multiple: 1 }}
           defaultSortOrder={getDefaultSortOrder("supplier", sorters)}
           filteredValue={getDefaultFilter("supplier", filters)}
@@ -170,12 +172,12 @@ export default function BestellvorschlaegePage() {
           )}
         />
 
-        <Table.Column<Row> title="Freier Lagerbestand" dataIndex="stock_free" />
-        <Table.Column<Row> title="Reservierter Bestand" dataIndex="stock_reserved_direct" sorter={{ multiple: 1 }} />
-        <Table.Column<Row> title="Reserviert in Stücklisten" dataIndex="stock_reserved_bom" sorter={{ multiple: 1 }} />
-        <Table.Column<Row> title="Nicht verfügbar" dataIndex="stock_unavailable" sorter={{ multiple: 1 }} />
-        <Table.Column<Row> title="Physischer Bestand" dataIndex="stock_physical" sorter={{ multiple: 1 }} />
-        <Table.Column<Row> title="Nachbestellter Bestand" dataIndex="stock_on_order" sorter={{ multiple: 1 }} />
+        <Table.Column<Row> title="Freier Lagerbestand" dataIndex="stock_free" width={140} sorter={{ multiple: 1 }} />
+        <Table.Column<Row> title="Reservierter Bestand" dataIndex="stock_reserved_direct" width={140} sorter={{ multiple: 1 }} />
+        <Table.Column<Row> title="Reserviert in Stücklisten" dataIndex="stock_reserved_bom" width={140} sorter={{ multiple: 1 }} />
+        <Table.Column<Row> title="Nicht verfügbar" dataIndex="stock_unavailable" width={140} sorter={{ multiple: 1 }} />
+        <Table.Column<Row> title="Physischer Bestand" dataIndex="stock_physical" width={140} sorter={{ multiple: 1 }} />
+        <Table.Column<Row> title="Nachbestellter Bestand" dataIndex="stock_on_order" width={140} sorter={{ multiple: 1 }} />
 
         <Table.Column<Row>
           title="Verbrauch"
@@ -187,7 +189,7 @@ export default function BestellvorschlaegePage() {
           )}
         />
 
-        <Table.Column<Row> title="aktualisiert am" dataIndex="updated_at" width={25} hidden />
+        <Table.Column<Row> title="aktualisiert am" dataIndex="updated_at" width={150} hidden />
       </Table>
     </List>
   );
