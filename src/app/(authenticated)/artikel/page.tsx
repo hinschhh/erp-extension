@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { useTable } from "@refinedev/antd";
-import { Table, Card, Space, Tag, Input, Button } from "antd";
+import { Table, Card, Space, Tag, Input, Button, Col, Row } from "antd";
 import type { Tables } from "@/types/supabase";
 import { EditOutlined, EyeOutlined } from "@ant-design/icons";
 import SyncReferenceProductsButton from "@/components/common/artikel/SyncReferenceProductsButton";
@@ -35,15 +35,12 @@ export default function ArtikelListPage() {
     <Card
       title="Artikel"
       extra={
-        <>
-        <Input.Search
+        <Row><Col style={{ marginRight: 8 }}><SyncReferenceProductsButton refreshAfter /></Col><Col><Input.Search
           placeholder="SKU, Name, Hersteller…"
           allowClear
           onSearch={setSearch}
           onChange={(e) => setSearch(e.target.value)}
-        />
-        <SyncReferenceProductsButton refreshAfter />
-        </>
+        /></Col></Row>
       }
     >
       <Table<Row>
