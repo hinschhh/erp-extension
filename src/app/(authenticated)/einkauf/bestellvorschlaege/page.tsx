@@ -102,7 +102,7 @@ export default function BestellvorschlaegePage() {
         {...tableProps}
         pagination={{
           ...tableProps.pagination,
-          position: ["bottomRight"],
+          position: ["topRight", "bottomRight"],
           size: "small",
           showSizeChanger: true,
           pageSizeOptions: [50, 100, 250, 500],
