@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { Table, Tooltip, Typography } from "antd";
+import { Table, Tooltip, Typography, Tag } from "antd"; // ⬅️ Tag hinzu
 import {
   List,
   useTable,
@@ -18,6 +18,7 @@ type Row = {
   sku: string | null;
   inventory_category: string | null;
   supplier: string | null;
+  on_demand: boolean | null;      // ⬅️ NEU
   stock_free: number | string;
   stock_reserved_direct: number | string;
   stock_reserved_bom: number | string;
@@ -81,6 +82,15 @@ export default function BestellvorschlaegePage() {
     [invCatSelectProps.options],
   );
 
+  // Für on_demand reichen feste Optionen (Boolean)
+  const onDemandOptions: ColumnFilterOption[] = useMemo(
+    () => [
+      { label: "Nur auf Bestellung", value: "true" },
+      { label: "In der Regel auf Lager", value: "false" },
+    ],
+    [],
+  );
+
   const { selectProps: supplierSelectProps } = useSelect({
     resource: "rpt_products_inventory_purchasing",
     optionLabel: "supplier",
@@ -95,6 +105,17 @@ export default function BestellvorschlaegePage() {
     [supplierSelectProps.options],
   );
 
+  // Helper: Badge/Tag-Renderer
+  const renderOnDemandTag = (flag: boolean | null | undefined) => {
+    if (flag === true) {
+      return <Tag>Nur auf Bestellung</Tag>;
+    }
+    if (flag === false) {
+      return <Tag>In der Regel auf Lager</Tag>;
+    }
+    return <Tag>—</Tag>; // falls NULL
+  };
+
   return (
     <List title="Bestellvorschläge">
       <Table
@@ -108,33 +129,23 @@ export default function BestellvorschlaegePage() {
           pageSizeOptions: [50, 100, 250, 500],
           showTotal: (t) => `${t} Einträge`,
         }}
-        tableLayout="fixed"  
+        tableLayout="fixed"
         sticky={{}}
-        scroll={{
-          x: "max-content",
-          y: "90vh",
-        }}
-        style={{
-          flex: 1,
-          overflow: "auto",
-          height: "50%",
-        }}
+        scroll={{ x: "max-content", y: "90vh" }}
+        style={{ flex: 1, overflow: "auto", height: "50%" }}
       >
         {/* SKU */}
         <Table.Column<Row>
           title="SKU"
           dataIndex="sku"
-          width={250} ellipsis
+          width={250}
+          ellipsis
           fixed="left"
           sorter
           defaultSortOrder={getDefaultSortOrder("sku", sorters)}
           filteredValue={getDefaultFilter("sku", filters)}
           filterDropdown={(fp) => (
-            <ColumnMultiSelectFilter
-              {...fp}
-              options={skuOptions}
-              placeholder="SKU wählen…"
-            />
+            <ColumnMultiSelectFilter {...fp} options={skuOptions} placeholder="SKU wählen…" />
           )}
           render={(v) => <Typography.Text code>{v ?? "—"}</Typography.Text>}
         />
@@ -143,7 +154,8 @@ export default function BestellvorschlaegePage() {
         <Table.Column<Row>
           title="Inventur-Kategorie"
           dataIndex="inventory_category"
-          width={150} ellipsis
+          width={150}
+          ellipsis
           sorter
           filteredValue={getDefaultFilter("inventory_category", filters)}
           filterDropdown={(fp) => (
@@ -159,7 +171,8 @@ export default function BestellvorschlaegePage() {
         <Table.Column<Row>
           title="Lieferant"
           dataIndex="supplier"
-          width={100} ellipsis
+          width={100}
+          ellipsis
           sorter={{ multiple: 1 }}
           defaultSortOrder={getDefaultSortOrder("supplier", sorters)}
           filteredValue={getDefaultFilter("supplier", filters)}
@@ -170,6 +183,23 @@ export default function BestellvorschlaegePage() {
               placeholder="Lieferant wählen…"
             />
           )}
+        />
+
+        {/* On-Demand (als Tags) */}
+        <Table.Column<Row>
+          title="On-Demand"
+          dataIndex="on_demand"
+          width={180}
+          sorter
+          filteredValue={getDefaultFilter("on_demand", filters)}
+          filterDropdown={(fp) => (
+            <ColumnMultiSelectFilter
+              {...fp}
+              options={onDemandOptions}
+              placeholder="True/False wählen…"
+            />
+          )}
+          render={(v: Row["on_demand"]) => renderOnDemandTag(v)}
         />
 
         <Table.Column<Row> title="Freier Lagerbestand" dataIndex="stock_free" width={140} sorter={{ multiple: 1 }} />
