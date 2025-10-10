@@ -31,7 +31,7 @@ const EXT_TABLE = "ref_billbee_product_extension";
 const EXT_CONFLICT_KEY = "billbee_product_id";
 
 type ProductRow = Tables<"rpt_products_full">;
-type ProductRowStrict = Omit<ProductRow, "id"> & { id: number };
+type ProductRowStrict = Omit<ProductRow, "id"> & { id: number; supplier_sku?: string };
 type ComponentWithQty = ProductRowStrict & { qty: number };
 type ParentWithQty = ProductRowStrict & { qty: number };
 
@@ -174,16 +174,16 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
   // ------- FORM (nur Extension-Felder) -------
   const [form] = Form.useForm();
   const editableKeys = React.useMemo(
-    () => (pStrict?.is_bom ? [] : (["external_sku", "purchase_details"] as const)),
+    () => (pStrict?.is_bom ? [] : (["supplier_sku", "purchase_details"] as const)),
     [pStrict?.is_bom],
   );
-  type EditableShape = { external_sku: string; purchase_details: string };
+  type EditableShape = { supplier_sku: string; purchase_details: string };
 
   const initialRef = React.useRef<EditableShape | null>(null);
   React.useEffect(() => {
     if (!pStrict) return;
     const init: EditableShape = {
-      external_sku: pStrict.external_sku ?? "",
+      supplier_sku: pStrict.supplier_sku ?? "",
       purchase_details: pStrict.purchase_details ?? "",
     };
     initialRef.current = init;
@@ -191,11 +191,11 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pStrict?.id]);
 
-  const wExternalSku = Form.useWatch("external_sku", form);
+  const wExternalSku = Form.useWatch("supplier_sku", form);
   const wPurchaseDetails = Form.useWatch("purchase_details", form);
   const normalize = (v: any) => (v ?? "").toString();
   const currentVals: EditableShape = {
-    external_sku: normalize(wExternalSku),
+    supplier_sku: normalize(wExternalSku),
     purchase_details: normalize(wPurchaseDetails),
   };
   const isDirty =
@@ -244,13 +244,13 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
     form.submit();
   };
 
-  const onFinish = async (values: { external_sku?: string; purchase_details?: string }) => {
+  const onFinish = async (values: { supplier_sku?: string; purchase_details?: string }) => {
     if (!hasNumericId) return;
     setSaving(true);
     try {
       const payload: Record<string, any> = {
         [EXT_CONFLICT_KEY]: idNum,
-        external_sku: values.external_sku ?? null,
+        supplier_sku: values.supplier_sku ?? null,
         purchase_details: values.purchase_details ?? null,
       };
 
@@ -261,7 +261,7 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
       if (error) throw error;
 
       initialRef.current = {
-        external_sku: values.external_sku ?? "",
+        supplier_sku: values.supplier_sku ?? "",
         purchase_details: values.purchase_details ?? "",
       };
 
@@ -480,7 +480,7 @@ React.useEffect(() => {
           {!pStrict?.is_bom && (
             <>
               <Descriptions.Item label="Externe Art.-Nr.">
-                <Form.Item name="external_sku" style={{ margin: 0 }}>
+                <Form.Item name="supplier_sku" style={{ margin: 0 }}>
                   <Input placeholder="Externe Art.-Nr." />
                 </Form.Item>
               </Descriptions.Item>
@@ -553,7 +553,7 @@ React.useEffect(() => {
                   width: 160,
                   render: (_: any, r) => currency((r.qty ?? 1) * Number(r.net_purchase_price ?? 0)),
                 },
-                { title: "Externe Art.-Nr.", dataIndex: "external_sku", width: 180, ellipsis: true },
+                { title: "Externe Art.-Nr.", dataIndex: "supplier_sku", width: 180, ellipsis: true },
                 {
                   title: "Kaufdetails",
                   dataIndex: "purchase_details",
