@@ -5,11 +5,13 @@ import React from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import Image from "next/image";
+import dayjs from "dayjs";
 import { Card, Descriptions, Typography, Divider, Table, Tag, Row, Col, Space, Button } from "antd";
 import { useShow, useList } from "@refinedev/core";
 import type { Tables } from "@/types/supabase";
 import type { HttpError } from "@refinedev/core";
 import { supabaseBrowserClient } from "@/utils/supabase/client";
+import SyncStockSingleProductButton from "@components/artikel/SyncStockSingleProductButton";
 
 type ProductRow = Tables<"rpt_products_full">;
 type ProductRowStrict = Omit<ProductRow, "id"> & { id: number };
@@ -36,7 +38,60 @@ type InvRow = {
 const currency = (v: number | null | undefined) =>
   v != null ? new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(Number(v)) : "—";
 
-const fetcher = (url: string) => fetch(url).then((r) => (r.ok ? r.json() : null));
+// --- Rate-Limited Fetcher direkt in der gleichen Datei ---
+
+let queue: Array<() => void> = [];
+let active = false;
+let lastRun = 0;
+const MIN_INTERVAL = 500; // 0,5 Sekunden Abstand (→ max. 2/s)
+
+async function processQueue() {
+  if (active || queue.length === 0) return;
+  const now = Date.now();
+  const diff = now - lastRun;
+  const wait = diff < MIN_INTERVAL ? MIN_INTERVAL - diff : 0;
+
+  active = true;
+  setTimeout(async () => {
+    const job = queue.shift();
+    if (!job) {
+      active = false;
+      return;
+    }
+    lastRun = Date.now();
+    job();
+    active = false;
+    processQueue();
+  }, wait);
+}
+
+const fetcher = (url: string): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    const task = async () => {
+      try {
+        const res = await fetch(url);
+        if (res.status === 429) {
+          // falls Billbee limitiert → Retry nach 1s
+          const retryAfter = res.headers.get("Retry-After");
+          const waitMs = (retryAfter ? parseInt(retryAfter, 10) : 1) * 1000;
+          await new Promise((r) => setTimeout(r, waitMs));
+          queue.push(task);
+          processQueue();
+          return;
+        }
+        if (!res.ok) return resolve(null);
+        const data = await res.json();
+        resolve(data);
+      } catch (e) {
+        reject(e);
+      } finally {
+        processQueue();
+      }
+    };
+    queue.push(task);
+    processQueue();
+  });
+};
 
 const toStrict = (rows?: ProductRow[] | null): ProductRowStrict[] =>
   (rows ?? [])
@@ -71,7 +126,7 @@ type PoItemRow = {
 };
 
 export default function ArtikelShowPage({ params }: { params: { id: string } }) {
-  const id = params.id;
+  const id: number = Number(params.id);
   const idNum = Number(id);
   const hasNumericId = Number.isFinite(idNum);
 
@@ -81,7 +136,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
   });
 
   // Lagerdaten laden
-  const { data, isLoading, isError, error } = useList<InvRow>({
+  const { data, isLoading, isError, error, refetch } = useList<InvRow>({
     resource: "rpt_products_inventory_purchasing",
     filters: [{ field: "billbee_product_id", operator: "eq", value: idNum }],
     pagination: { mode: "off" },
@@ -390,14 +445,28 @@ React.useEffect(() => {
       ) : !inv ? (
         <Typography.Text>Kein Lagerdatensatz gefunden.</Typography.Text>
       ) : (
+
         <Descriptions
-          title={`Lagerbestand ${inv.updated_at}`}
+          title={
+            <div>
+              <div style={{ fontWeight: 600 }}>
+                Lagerbestand{" "}
+              </div>
+              <div style={{ fontSize: 12, color: "#888" }}>
+                Zuletzt aktualisiert:{" "}
+                {inv.updated_at
+                  ? dayjs(inv.updated_at).format("DD.MM.YYYY HH:mm")
+                  : "—"}
+              </div>
+            </div>
+          }
           bordered
           column={1}
           size="small"
-          extra={<Tag>{inv.inventory_category ?? "—"}</Tag>}
+          extra={<><Tag>{inv.inventory_category ?? "—"}</Tag><SyncStockSingleProductButton billbeeProductId={id} onSynced={() => refetch()}  /></>}
           labelStyle={{ width: 260 }}
         >
+
           <Descriptions.Item label="Freier Lagerbestand">{inv.stock_free}</Descriptions.Item>
           <Descriptions.Item label="Reserviert (direkt)">{inv.stock_reserved_direct}</Descriptions.Item>
           <Descriptions.Item label="Reserviert (BOM)">{inv.stock_reserved_bom}</Descriptions.Item>
@@ -405,7 +474,7 @@ React.useEffect(() => {
           <Descriptions.Item label="Physischer Bestand">
             <b>{inv.stock_physical}</b>
           </Descriptions.Item>
-          <Descriptions.Item label="Nachbestellt (Platzhalter)">{inv.stock_on_order}</Descriptions.Item>
+          <Descriptions.Item label="Nachbestellt">{inv.stock_on_order}</Descriptions.Item>
           <Descriptions.Item label="Zählbestand">{inv.counted_qty}</Descriptions.Item>
           <Descriptions.Item label="Zähldatum">{inv.counted_at ?? "—"}</Descriptions.Item>
           <Descriptions.Item label="Inventarwert">{currency(Number(inv.inventory_value as any))}</Descriptions.Item>
