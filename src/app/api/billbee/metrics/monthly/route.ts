@@ -1,294 +1,287 @@
 import { NextRequest, NextResponse } from "next/server";
 
-/** --------------------------------------------
- *  Konfiguration: Billbee State-IDs (anpassbar)
- *  --------------------------------------------
- *  OFFER_OPEN:   Status-IDs für „offene Angebote“ (default: 14)
- *  STOCK_STATES: Status-IDs für Auftragsbestand (default: 2,3,13)
- *  CANCELLED:    Optionale Storno-IDs (leer = keine Filterung)
- *
- *  Alternativ via ENV:
- *  BILLBEE_STATE_OFFER_OPEN_IDS="14"
- *  BILLBEE_STATE_STOCK_IDS="2,3,13"
- *  BILLBEE_STATE_CANCELLED_IDS="8"
- */
+/** ---- Konfiguration ---- */
 function parseIds(src?: string | null): number[] | null {
   if (!src) return null;
-  return src
-    .split(",")
-    .map((s) => Number(s.trim()))
-    .filter((n) => Number.isFinite(n));
+  return src.split(",").map((s) => Number(s.trim())).filter((n) => Number.isFinite(n));
 }
-
 const CONFIG = {
-  OFFER_OPEN: parseIds(process.env.BILLBEE_STATE_OFFER_OPEN_IDS) ?? [14],
-  STOCK_STATES: parseIds(process.env.BILLBEE_STATE_STOCK_IDS) ?? [2, 3, 13],
-  CANCELLED: parseIds(process.env.BILLBEE_STATE_CANCELLED_IDS) ?? [],
+  // feste Sets laut deiner Vorgabe
+  OFFER_OPEN: [14],
+  STOCK_STATES: [1, 2, 3, 13],
+  CANCELLED: [6, 8, 9],
 };
 
-// States, die bei Auftragseingang MTD ausgeschlossen werden sollen
-const EXCLUDED_STATES_FOR_ORDER_INTAKE = [1, 2, 3, 4] as const;
-
+type BillbeeOrderItem = { TotalPrice?: number | null; SKU?: string | null; Product?: { SKU?: string | null } | null; };
+type BillbeePayment = { PayValue?: number | null; PayDate?: string | null };
 type BillbeeOrder = {
-  Id?: string;
-  OrderNumber?: string;
-
-  // Datumsfelder
-  CreatedAt?: string; // Bestelldatum
-  ConfirmedAt?: string | null;
-  ShippedAt?: string | null; // „Lieferdatum“ interpretieren wir als Versanddatum
-  InvoiceDate?: string | null;
-
-  // Rechnungsfelder
-  InvoiceNumber?: number | string | null;
-
-  // Summen
-  TotalCost?: number | null; // Brutto inkl. Versand (laut Vorlage)
-  ShippingCost?: number | null;
-  OrderItems?: Array<{ TotalPrice?: number | null }>;
-
-  // Zahlungen
-  PaidAmount?: number | null;
-  Payments?: Array<{ PayValue?: number | null }>;
-
-  // Status
+  Id?: string; OrderNumber?: string;
+  CreatedAt?: string; ShippedAt?: string | null;
+  InvoiceDate?: string | null; InvoiceNumber?: number | string | null;
+  TotalCost?: number | null; ShippingCost?: number | null; OrderItems?: BillbeeOrderItem[];
+  PaidAmount?: number | null; Payments?: BillbeePayment[];
   State?: number;
+  Buyer?: { Name?: string | null } | null;
+  Customer?: { Name?: string | null } | null;
+  BillAddress?: { FullName?: string | null; FirstName?: string | null; LastName?: string | null } | null;
+  DeliveryAddress?: { FullName?: string | null; FirstName?: string | null; LastName?: string | null } | null;
 };
-
-type ApiPagedResult<T> = {
-  Paging: { Page: number; TotalPages: number; TotalRows: number; PageSize: number };
-  ErrorMessage?: string | null;
-  Data: T[];
-};
+type ApiPagedResult<T> = { Paging: { Page: number; TotalPages: number; TotalRows: number; PageSize: number }, Data: T[] };
 
 const BILLBEE_BASE = "https://app.billbee.io/api/v1";
-
 function authHeaders() {
-  const key = process.env.BILLBEE_API_KEY!;
-  const user = process.env.BILLBEE_USERNAME!;
-  const pass = process.env.BILLBEE_API_PASSWORD!;
-  const basic = Buffer.from(`${user}:${pass}`).toString("base64");
+  const basic = Buffer.from(`${process.env.BILLBEE_USERNAME!}:${process.env.BILLBEE_API_PASSWORD!}`).toString("base64");
   return {
-    "X-Billbee-Api-Key": key,
+    "X-Billbee-Api-Key": process.env.BILLBEE_API_KEY!,
     Authorization: `Basic ${basic}`,
     Accept: "application/json",
     "Content-Type": "application/json",
   };
 }
 
-// ---------- Helpers ----------
-function eur(n: unknown) {
-  const v = typeof n === "number" ? n : 0;
-  return Number.isFinite(v) ? v : 0;
-}
+/** ---- Helpers ---- */
+const eur = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? n : 0);
+const inList = (v: number | undefined, list: number[]) => Number.isFinite(v) && list.includes(v as number);
+const isInMonth = (iso: string | null | undefined, y: number, m0: number) => !!iso && new Date(iso).getUTCFullYear() === y && new Date(iso).getUTCMonth() === m0;
 
-// Brutto inkl. Versand (robust): 1) TotalCost, 2) Sum(OrderItems.TotalPrice)+ShippingCost
 function grossInclShipping(o: BillbeeOrder): number {
-  const total = eur(o.TotalCost);
-  if (total > 0) return total;
+  const total = eur(o.TotalCost); if (total > 0) return total;
   const items = (o.OrderItems ?? []).reduce((s, it) => s + eur(it.TotalPrice), 0);
   return items + eur(o.ShippingCost);
 }
-
-// Zahlungen am Auftrag: 1) PaidAmount (falls >0), sonst Sum(Payments.PayValue)
 function paidSum(o: BillbeeOrder): number {
-  const paid = eur(o.PaidAmount);
-  if (paid > 0) return paid;
+  const paid = eur(o.PaidAmount); if (paid > 0) return paid;
   return (o.Payments ?? []).reduce((s, p) => s + eur(p.PayValue), 0);
 }
-
-function isInMonth(dateIso: string | null | undefined, year: number, monthIdx0: number): boolean {
-  if (!dateIso) return false;
-  const d = new Date(dateIso);
-  return d.getUTCFullYear() === year && d.getUTCMonth() === monthIdx0;
+function isSB(o: BillbeeOrder): boolean {
+  for (const it of (o.OrderItems ?? [])) {
+    const sku = (it.SKU ?? it.Product?.SKU ?? "").toLowerCase();
+    if (sku.includes("sonder")) return true;
+  }
+  return false;
+}
+function getCustomerName(o: BillbeeOrder): string {
+  const cands = [
+    o?.Buyer?.Name, o?.Customer?.Name, o?.BillAddress?.FullName,
+    [o?.BillAddress?.FirstName, o?.BillAddress?.LastName].filter(Boolean).join(" ").trim(),
+    o?.DeliveryAddress?.FullName,
+    [o?.DeliveryAddress?.FirstName, o?.DeliveryAddress?.LastName].filter(Boolean).join(" ").trim(),
+  ].filter((v) => typeof v === "string" && v.trim());
+  return (cands[0] as string) || "—";
 }
 
-function inList(value: number | undefined, list: number[]): boolean {
-  if (!Number.isFinite(value)) return false;
-  return list.includes(value as number);
-}
-
-async function fetchOrdersPaged(query: Record<string, string | number | number[] | undefined>) {
+type FetchOrdersArgs = Record<string, string | number | number[] | undefined>;
+async function fetchOrdersPaged(query: FetchOrdersArgs) {
   const pageSize = Number(query.pageSize ?? 250);
-  let page = 1;
-  const all: BillbeeOrder[] = [];
-
-  // eslint-disable-next-line no-constant-condition
+  let page = 1; const all: BillbeeOrder[] = [];
   while (true) {
     const url = new URL(`${BILLBEE_BASE}/orders`);
     url.searchParams.set("page", String(page));
     url.searchParams.set("pageSize", String(pageSize));
-
+    url.searchParams.set("expand", "orderitems");
     for (const [k, v] of Object.entries(query)) {
-      if (v === undefined) continue;
-      if (k === "page" || k === "pageSize") continue;
-
-      if (k === "orderStateId" && Array.isArray(v)) {
-        for (const id of v as number[]) url.searchParams.append("orderStateId", String(id));
-      } else {
-        url.searchParams.set(k, String(v));
-      }
+      if (v === undefined || k === "page" || k === "pageSize") continue;
+      if (k === "orderStateId" && Array.isArray(v)) (v as number[]).forEach((id) => url.searchParams.append("orderStateId", String(id)));
+      else url.searchParams.set(k, String(v));
     }
-
     const res = await fetch(url.toString(), { headers: authHeaders(), cache: "no-store" });
-
-    if (res.status === 429) {
-      const retryAfter = Number(res.headers.get("Retry-After") ?? "1");
-      await new Promise((r) => setTimeout(r, Math.max(1000, retryAfter * 1000)));
-      continue;
-    }
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Billbee /orders failed: ${res.status} – ${text}`);
-    }
-
+    if (res.status === 429) { const ra = Number(res.headers.get("Retry-After") ?? "1"); await new Promise(r => setTimeout(r, Math.max(1000, ra * 1000))); continue; }
+    if (!res.ok) throw new Error(`Billbee /orders failed: ${res.status} – ${await res.text()}`);
     const data = (await res.json()) as ApiPagedResult<BillbeeOrder>;
     all.push(...(data?.Data ?? []));
-
-    const { Page, PageSize, TotalRows } = data?.Paging ?? { Page: page, PageSize: pageSize, TotalRows: 0 };
-    const fetched = Page * PageSize;
-    if (fetched >= TotalRows || (data?.Data?.length ?? 0) === 0) break;
-
-    page += 1;
-    // 2 req/s/Endpoint → kleine Pause
-    await new Promise((r) => setTimeout(r, 600));
+    const { Page, PageSize, TotalRows } = data.Paging ?? { Page: page, PageSize: pageSize, TotalRows: 0 };
+    if (Page * PageSize >= TotalRows || (data?.Data?.length ?? 0) === 0) break;
+    page += 1; await new Promise(r => setTimeout(r, 600));
   }
   return all;
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const now = new Date();
-    const year = now.getFullYear();
-    const monthIdx = now.getMonth(); // 0-basiert
-    const firstDay = new Date(year, monthIdx, 1, 0, 0, 0);
-    const lastDay = new Date(year, monthIdx + 1, 0, 23, 59, 59);
-
+    const now = new Date(); const year = now.getFullYear(); const m0 = now.getMonth();
+    const firstDay = new Date(year, m0, 1, 0, 0, 0); const lastDay = new Date(year, m0 + 1, 0, 23, 59, 59);
     const { searchParams } = new URL(req.url);
     const from = searchParams.get("from") ?? firstDay.toISOString();
     const to = searchParams.get("to") ?? lastDay.toISOString();
 
-    // ---------- Basis: Bestellungen nach Bestelldatum (CreatedAt) im Zeitraum ----------
-    const ordersByOrderDate = await fetchOrdersPaged({
-      minOrderDate: from,
-      maxOrderDate: to,
-      pageSize: 250,
-    });
+    /* ---------- MTD: per Bestelldatum ---------- */
+    const ordersByOrderDate = await fetchOrdersPaged({ minOrderDate: from, maxOrderDate: to, pageSize: 250 });
 
-    // ---------- A) Angebote MTD: NUR State 14 (CONFIG.OFFER_OPEN) ----------
-    // ---------- B) Auftragseingang Bestellungen MTD: State NICHT IN [1,2,3,4] ----------
-    let angeboteMTD = 0;
-    let auftragseingangBestellungenMTD = 0;
+    let ae_total = 0, ae_std = 0, ae_sb = 0;
+    let ae_count_total = 0, ae_count_std = 0, ae_count_sb = 0;
+
+    let offers_total = 0, offers_std = 0, offers_sb = 0;
+    let offers_count_total = 0, offers_count_std = 0, offers_count_sb = 0;
 
     for (const o of ordersByOrderDate) {
-      const inThisMonth = isInMonth(o.CreatedAt, year, monthIdx);
-      if (!inThisMonth) continue;
+      if (!isInMonth(o.CreatedAt, year, m0)) continue;
+      const gross = grossInclShipping(o), sb = isSB(o);
 
-      const gross = grossInclShipping(o);
-
-      // A) AngeboteMTD: nur State in OFFER_OPEN (default [14])
       if (inList(o.State, CONFIG.OFFER_OPEN)) {
-        angeboteMTD += gross;
+        offers_total += gross; offers_count_total += 1;
+        if (sb) { offers_sb += gross; offers_count_sb += 1; } else { offers_std += gross; offers_count_std += 1; }
+        continue;
       }
+      if (inList(o.State, CONFIG.CANCELLED)) continue;
 
-      // B) Auftragseingang: State NICHT in [1,2,3,4]
-      if (!inList(o.State, EXCLUDED_STATES_FOR_ORDER_INTAKE as unknown as number[])) {
-        auftragseingangBestellungenMTD += gross;
-      }
+      ae_total += gross; ae_count_total += 1;
+      if (sb) { ae_sb += gross; ae_count_sb += 1; } else { ae_std += gross; ae_count_std += 1; }
     }
 
-    // ---------- C) Umsatz (ShippedAt im Monat) ----------
-    const modifiedThisMonth = await fetchOrdersPaged({
-      modifiedAtMin: from,
-      modifiedAtMax: to,
-      pageSize: 250,
-    });
+    /* ---------- Umsatz MTD (versendet) ---------- */
+    const modifiedThisMonth = await fetchOrdersPaged({ modifiedAtMin: from, modifiedAtMax: to, pageSize: 250 });
+    let rev_total = 0, rev_std = 0, rev_sb = 0;
+    let rev_count_total = 0, rev_count_std = 0, rev_count_sb = 0;
 
-    let umsatzMTD = 0;
     for (const o of modifiedThisMonth) {
-      if (isInMonth(o.ShippedAt, year, monthIdx)) {
-        umsatzMTD += grossInclShipping(o);
+      if (!isInMonth(o.ShippedAt, year, m0)) continue;
+      if (inList(o.State, CONFIG.CANCELLED)) continue;
+      const gross = grossInclShipping(o);
+      rev_total += gross; rev_count_total += 1;
+      if (isSB(o)) { rev_sb += gross; rev_count_sb += 1; } else { rev_std += gross; rev_count_std += 1; }
+    }
+
+    /* ---------- Offene Angebote (aktuell) ---------- */
+    const openOffers = await fetchOrdersPaged({ orderStateId: CONFIG.OFFER_OPEN, pageSize: 250 });
+    const offeneAngebote = openOffers.reduce((s, o) => s + grossInclShipping(o), 0);
+    const offeneAngeboteCount = openOffers.length;
+
+    /* ---------- Auftragsbestand (aktuell) ---------- */
+    const stockOrders = await fetchOrdersPaged({ orderStateId: CONFIG.STOCK_STATES, pageSize: 250 });
+    let ob_total = 0, ob_std = 0, ob_sb = 0;
+    let ob_count_total = 0, ob_count_std = 0, ob_count_sb = 0;
+
+    for (const o of stockOrders) {
+      if (inList(o.State, CONFIG.CANCELLED)) continue;
+      if (o.ShippedAt) continue; // „unversendet, Total“
+      const gross = grossInclShipping(o);
+      ob_total += gross; ob_count_total += 1;
+      if (isSB(o)) { ob_sb += gross; ob_count_sb += 1; } else { ob_std += gross; ob_count_std += 1; }
+    }
+
+    /* ---------- Unversendet-Basis (exkl. Angebot/CANCELLED) ---------- */
+    // Wir nehmen die gleichen STOCK_STATES wie oben (deine Vorgabe), aber nur unversendet und exkl. Angebot/Storno
+    const baseUnshipped = stockOrders.filter(o => !o.ShippedAt && !inList(o.State, CONFIG.CANCELLED) && !inList(o.State, CONFIG.OFFER_OPEN));
+
+    type UnshippedRow = { id: string; orderNumber?: string; createdAt?: string | null; customer: string; gross: number; paid: number; open: number; };
+    const unpaid: UnshippedRow[] = [], partial: UnshippedRow[] = [];
+    let fullCount = 0, fullSum = 0, unpaidSumGross = 0, partialSumGross = 0, partialSumPaid = 0;
+
+    // „erhalteneAnzahlungen (unversendet)“
+    let deposits_total = 0, deposits_std = 0, deposits_sb = 0;
+    let deposits_count_total = 0, deposits_count_std = 0, deposits_count_sb = 0; // Anzahl Aufträge mit paid > 0
+
+    for (const o of baseUnshipped) {
+      const gross = grossInclShipping(o);
+      const paid = paidSum(o);
+      const open = Math.max(0, gross - paid);
+      const sb = isSB(o);
+
+      // erhaltene Anzahlungen (unversendet) = Summe paid; Count = Aufträge mit paid > 0
+      deposits_total += paid;
+      if (paid > 0) deposits_count_total += 1;
+      if (sb) { deposits_sb += paid; if (paid > 0) deposits_count_sb += 1; } else { deposits_std += paid; if (paid > 0) deposits_count_std += 1; }
+
+      const row: UnshippedRow = {
+        id: String(o.Id ?? ""),
+        orderNumber: o.OrderNumber,
+        createdAt: o.CreatedAt,
+        customer: getCustomerName(o),
+        gross, paid, open,
+      };
+
+      if (paid <= 0) { unpaid.push(row); unpaidSumGross += gross; }
+      else if (paid < gross) { partial.push(row); partialSumGross += gross; partialSumPaid += paid; }
+      else { fullCount += 1; fullSum += gross; }
+    }
+
+    /* ---------- OPOS (versendet & nicht voll bezahlt) ---------- */
+    const oposOrders: Array<{ id: string; number?: string; shippedAt?: string | null; open: number; customer: string }> = [];
+    let oposTotal = 0;
+    for (const o of modifiedThisMonth) {
+      if (!o.ShippedAt) continue;
+      if (inList(o.State, CONFIG.CANCELLED)) continue;
+      const open = Math.max(0, grossInclShipping(o) - paidSum(o));
+      if (open > 0) { oposOrders.push({ id: String(o.Id ?? ""), number: o.OrderNumber, shippedAt: o.ShippedAt, open, customer: getCustomerName(o) }); oposTotal += open; }
+    }
+    const oposCount = oposOrders.length;
+
+    /* ---------- Zahlungseingang MTD ---------- */
+    let cashinMTD = 0;
+    let cashinMTDCount = 0; // Anzahl einzelner Payments im Monat
+    for (const o of modifiedThisMonth) {
+      for (const p of (o.Payments ?? [])) {
+        if (!p.PayDate || !isInMonth(p.PayDate, year, m0)) continue;
+        const v = eur(p.PayValue); if (v > 0) { cashinMTD += v; cashinMTDCount += 1; }
       }
     }
 
-    // ---------- D) Offene Angebote (aktuell) ----------
-    const offeneAngeboteOrders = await fetchOrdersPaged({
-      orderStateId: CONFIG.OFFER_OPEN,
-      pageSize: 250,
-    });
-
-    let offeneAngebote = 0;
-    for (const o of offeneAngeboteOrders) {
-      offeneAngebote += grossInclShipping(o);
-    }
-
-    // ---------- E) Auftragsbestand (aktuell) ----------
-    const stockOrders = await fetchOrdersPaged({
-      orderStateId: CONFIG.STOCK_STATES,
-      pageSize: 250,
-    });
-
-    let auftragsbestand = 0;
-    for (const o of stockOrders) {
-      // Keine Stornos mitrechnen, falls definiert
-      if (inList(o.State, CONFIG.CANCELLED)) continue;
-      auftragsbestand += grossInclShipping(o);
-    }
-
-    // ---------- F) Erhaltene Anzahlungen (aktuell) ----------
-    // Definition: Zahlungen für Aufträge mit State ∈ STOCK_STATES
-    // UND ohne InvoiceNumber, ohne InvoiceDate, ohne ShippedAt
-    let erhalteneAnzahlungen = 0;
-    for (const o of stockOrders) {
-      if (inList(o.State, CONFIG.CANCELLED)) continue;
-
-      const hasInvoiceNumber =
-        o.InvoiceNumber !== null &&
-        o.InvoiceNumber !== undefined &&
-        String(o.InvoiceNumber).trim() !== "" &&
-        String(o.InvoiceNumber) !== "0";
-
-      const hasInvoiceDate = !!o.InvoiceDate;
-      const hasShipped = !!o.ShippedAt;
-
-      if (!hasInvoiceNumber && !hasInvoiceDate && !hasShipped) {
-        erhalteneAnzahlungen += paidSum(o);
-      }
-    }
-
-    // ---------- G) Hochrechnung (nur für die MTD-Kennzahlen) ----------
-    const dayOfMonth = now.getDate();
-    const daysInMonth = lastDay.getDate();
-    const factor = dayOfMonth > 0 ? daysInMonth / dayOfMonth : 1;
-
+    /* ---------- Forecast ---------- */
+    const day = now.getDate(), dim = lastDay.getDate(), factor = day > 0 ? dim / day : 1;
     const forecast = {
-      auftragseingangBestellungen: Math.round(auftragseingangBestellungenMTD * factor),
-      angebote: Math.round(angeboteMTD * factor),
-      umsatz: Math.round(umsatzMTD * factor),
+      auftragseingang: { total: Math.round(ae_total * factor), standard: Math.round(ae_std * factor), sb: Math.round(ae_sb * factor) },
+      angebote: { total: Math.round(offers_total * factor), standard: Math.round(offers_std * factor), sb: Math.round(offers_sb * factor) },
+      umsatz: { total: Math.round(rev_total * factor), standard: Math.round(rev_std * factor), sb: Math.round(rev_sb * factor) },
     };
 
-    return NextResponse.json(
-      {
-        period: { from, to, today: now.toISOString(), dayOfMonth, daysInMonth },
-        kpis: {
-          // MTD
-          auftragseingangBestellungenMTD,
-          angeboteMTD,
-          umsatzMTD,
-          forecast,
-          // Aktuell
-          offeneAngebote, // State = 14 (per Default)
-          auftragsbestand, // States = 2,3,13
-          erhalteneAnzahlungen, // Zahlungen auf (2,3,13) ohne Rechnung & ohne Versand
+    return NextResponse.json({
+      period: { from, to, today: now.toISOString(), dayOfMonth: day, daysInMonth: dim },
+      kpis: {
+        // MTD
+        auftragseingangMTD: {
+          total: ae_total, standard: ae_std, sb: ae_sb,
+          count: { total: ae_count_total, standard: ae_count_std, sb: ae_count_sb },
         },
-        meta: {
-          source: "Billbee /api/v1/orders",
-          notes:
-            "Angebote (MTD): nur State 14. Auftragseingang (MTD): Bestelldatum (CreatedAt) im Monat, State ≠ [1,2,3,4]. Umsatz (MTD): ShippedAt im Monat. Auftragsbestand: States 2,3,13. Anzahlungen: Payments/PaidAmount für States 2,3,13 ohne InvoiceNumber/InvoiceDate/ShippedAt. Brutto inkl. Versand via TotalCost.",
+        angeboteMTD: {
+          total: offers_total, standard: offers_std, sb: offers_sb,
+          count: { total: offers_count_total, standard: offers_count_std, sb: offers_count_sb },
         },
+        umsatzMTD: {
+          total: rev_total, standard: rev_std, sb: rev_sb,
+          count: { total: rev_count_total, standard: rev_count_std, sb: rev_count_sb },
+        },
+        zahlungseingangMTD: cashinMTD,
+        zahlungseingangMTDCount: cashinMTDCount,
+
+        // Bestände/aktuell
+        offeneAngebote,
+        offeneAngeboteCount,
+
+        auftragsbestand: {
+          total: ob_total, standard: ob_std, sb: ob_sb,
+          count: { total: ob_count_total, standard: ob_count_std, sb: ob_count_sb },
+        },
+
+        // Anzahlungen (unversendet)
+        erhalteneAnzahlungen: {
+          total: deposits_total, standard: deposits_std, sb: deposits_sb,
+          count: { total: deposits_count_total, standard: deposits_count_std, sb: deposits_count_sb },
+        },
+
+        // OPOS
+        opos: { totalOpen: oposTotal, count: oposCount, orders: oposOrders },
+
+        // Unversendet nach Bezahlstatus
+        unshippedPaymentStatus: {
+          unpaid: { count: unpaid.length, sum: unpaidSumGross, orders: unpaid },
+          partial: {
+            count: partial.length,
+            sum: partialSumGross,
+            orders: partial,
+            depositSum: partialSumPaid,
+            depositAvgRatio: partialSumGross > 0 ? partialSumPaid / partialSumGross : 0, // 0..1
+          },
+          full: { count: fullCount, sum: fullSum },
+        },
+
+        forecast,
       },
-      { status: 200 },
-    );
+      meta: {
+        source: "Billbee /api/v1/orders?expand=orderitems",
+        notes:
+          "AE MTD: CreatedAt im Monat, exkl. Angebot/CANCELLED. Umsatz MTD: ShippedAt im Monat, exkl. CANCELLED. OPOS: ShippedAt != null & open>0. Anzahlungen (unversendet): Σ paid über unversendete Orders (exkl. Angebot/CANCELLED). Unversendet-Buckets: unpaid/partial/full. Alle Karten liefern zusätzlich Counts.",
+      },
+    }, { status: 200 });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 });
   }
