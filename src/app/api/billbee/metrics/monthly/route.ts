@@ -30,7 +30,7 @@ type ApiPagedResult<T> = { Paging: { Page: number; TotalPages: number; TotalRows
 
 const BILLBEE_BASE = "https://app.billbee.io/api/v1";
 function authHeaders() {
-  const basic = Buffer.from(`${process.env.BILLBEE_USERNAME!}:${process.env.BILLBEE_API_PASSWORD!}`).toString("base64");
+  const basic = Buffer.from(`${process.env.BILLBEE_LOGIN!}:${process.env.BILLBEE_API_PASSWORD!}`).toString("base64");
   return {
     "X-Billbee-Api-Key": process.env.BILLBEE_API_KEY!,
     Authorization: `Basic ${basic}`,
