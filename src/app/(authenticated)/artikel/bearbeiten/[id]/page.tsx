@@ -27,36 +27,8 @@ import type { Tables } from "@/types/supabase";
 import type { HttpError } from "@refinedev/core";
 import { supabaseBrowserClient } from "@/utils/supabase/client";
 
-const EXT_TABLE = "ref_billbee_product_extension";
-const EXT_CONFLICT_KEY = "billbee_product_id";
-
-type ProductRow = Tables<"rpt_products_full">;
-type ProductRowStrict = Omit<ProductRow, "id"> & { id: number; supplier_sku?: string };
-type ComponentWithQty = ProductRowStrict & { qty: number };
-type ParentWithQty = ProductRowStrict & { qty: number };
-
-const currency = (v: number | null | undefined) =>
-  v != null ? new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(Number(v)) : "—";
-
-const fetcher = (url: string) => fetch(url).then((r) => (r.ok ? r.json() : null));
-
-const toStrict = (rows?: ProductRow[] | null): ProductRowStrict[] =>
-  (rows ?? [])
-    .filter((r): r is ProductRow => !!r && r.id != null)
-    .map((r) => ({ ...(r as ProductRow), id: Number(r.id) }));
-
-const UsedInImageCell: React.FC<{ id: number; alt?: string; size?: number }> = ({ id, alt, size = 48 }) => {
-  const { data } = useSWR<{ imageUrl?: string }>(`/api/billbee/products/get/${id}`, fetcher);
-  if (!data?.imageUrl) return <>—</>;
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={data.imageUrl}
-      alt={alt ?? "Bild"}
-      style={{ width: size, height: size, objectFit: "cover", borderRadius: 6 }}
-    />
-  );
-};
+/* ---------- Typen ---------- */
+type AppProduct = Tables<"app_products">;
 
 type PoItemRow = {
   id: string;
@@ -69,6 +41,31 @@ type PoItemRow = {
   kind: "normal" | "special";
 };
 
+const currency = (v: number | null | undefined) =>
+  v != null
+    ? new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(Number(v))
+    : "—";
+
+const fetcher = (url: string) => fetch(url).then((r) => (r.ok ? r.json() : null));
+
+/* Bildzelle für Tabellen */
+const UsedInImageCell: React.FC<{ id: number; alt?: string; size?: number }> = ({
+  id,
+  alt,
+  size = 48,
+}) => {
+  const { data } = useSWR<{ imageUrl?: string }>(`/api/billbee/products/get/${id}`, fetcher);
+  if (!data?.imageUrl) return <>—</>;
+  // eslint-disable-next-line @next/next/no-img-element
+  return (
+    <img
+      src={data.imageUrl}
+      alt={alt ?? "Bild"}
+      style={{ width: size, height: size, objectFit: "cover", borderRadius: 6 }}
+    />
+  );
+};
+
 export default function ArtikelEditPage({ params }: { params: { id: string } }) {
   const id = params.id;
   const idNum = Number(id);
@@ -77,30 +74,30 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
   const { open: notify } = useNotification();
   const [saving, setSaving] = React.useState(false);
 
-  const { queryResult } = useShow<ProductRow[], HttpError>({ resource: "rpt_products_full", id });
-  const p = queryResult?.data?.data as ProductRow | undefined;
-  const pStrict: ProductRowStrict | undefined =
-    p && p.id != null ? ({ ...(p as ProductRow), id: Number(p.id) } as ProductRowStrict) : undefined;
+  /* ---------- Produkt laden (app_products) ---------- */
+  const { queryResult } = useShow<AppProduct, HttpError>({
+    resource: "app_products",
+    id, // Primärschlüssel = id
+    meta: { select: "*" },
+  });
+  const p = queryResult?.data?.data;
 
+  /* ---------- Bild laden ---------- */
   const { data: imgData } = useSWR<{ imageUrl?: string }>(
     hasNumericId ? `/api/billbee/products/get/${idNum}` : null,
     fetcher,
   );
   const imageUrl = imgData?.imageUrl;
 
-  // Komponenten (falls BOM)
+  /* ---------- BOM: Komponenten (wenn p.bb_is_bom) ---------- */
   const { data: bomListRes } = useList<Tables<"bom_recipes">, HttpError>({
     resource: "bom_recipes",
     filters: hasNumericId ? [{ field: "billbee_bom_id", operator: "eq", value: idNum }] : [],
     pagination: { pageSize: 200 },
-    queryOptions: { enabled: !!pStrict?.is_bom && hasNumericId },
+    queryOptions: { enabled: !!p?.bb_is_bom && hasNumericId },
   });
 
-  const componentIds = (bomListRes?.data ?? [])
-    .map((r) => Number(r.billbee_component_id))
-    .filter((n) => Number.isFinite(n));
-
-  const qtyById = React.useMemo(() => {
+  const qtyByComponentId = React.useMemo(() => {
     const m = new Map<number, number>();
     (bomListRes?.data ?? []).forEach((r) => {
       const cid = Number(r.billbee_component_id);
@@ -110,31 +107,39 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
     return m;
   }, [bomListRes?.data]);
 
-  const { data: compRes } = useList<ProductRow[], HttpError>({
-    resource: "rpt_products_full",
-    filters: componentIds.length ? [{ field: "id", operator: "in", value: componentIds }] : [],
+  const componentIds =
+    (bomListRes?.data ?? [])
+      .map((r) => Number(r.billbee_component_id))
+      .filter((n) => Number.isFinite(n)) ?? [];
+
+  const { data: compRes } = useList<AppProduct[], HttpError>({
+    resource: "app_products",
+    filters: componentIds.length
+      ? [{ field: "id", operator: "in", value: componentIds }]
+      : [],
     pagination: { pageSize: 500 },
-    queryOptions: { enabled: !!pStrict?.is_bom && componentIds.length > 0 },
+    queryOptions: { enabled: !!p?.bb_is_bom && componentIds.length > 0 },
   });
 
-  const components: ComponentWithQty[] = toStrict(compRes?.data as ProductRow[] | undefined).map((c) => ({
-    ...c,
-    qty: qtyById.get(c.id) ?? 1,
-  }));
+  const components =
+    (compRes?.data as AppProduct[] | undefined)?.map((c) => ({
+      ...c,
+      qty: qtyByComponentId.get(Number(c.id)) ?? 1,
+    })) ?? [];
 
-  const ekBOM = components.reduce((s, c) => s + c.qty * Number(c.net_purchase_price ?? 0), 0);
-  const ekNetto = pStrict?.is_bom ? ekBOM : Number(pStrict?.net_purchase_price ?? 0);
+  const ekBOM = components.reduce(
+    (s, c) => s + (c.qty ?? 1) * Number(c.bb_net_purchase_price ?? 0),
+    0,
+  );
+  const ekNetto = p?.bb_is_bom ? ekBOM : Number(p?.bb_net_purchase_price ?? 0);
 
-  // Verwendet in …
+  /* ---------- „Verwendet in …“ (nur für Komponenten) ---------- */
   const { data: usedInRecipeRes } = useList<Tables<"bom_recipes">, HttpError>({
     resource: "bom_recipes",
     filters: hasNumericId ? [{ field: "billbee_component_id", operator: "eq", value: idNum }] : [],
     pagination: { pageSize: 500 },
-    queryOptions: { enabled: hasNumericId && !!pStrict && !pStrict.is_bom },
+    queryOptions: { enabled: hasNumericId && !!p && !p.bb_is_bom },
   });
-  const parentIds = (usedInRecipeRes?.data ?? [])
-    .map((r) => Number(r.billbee_bom_id))
-    .filter((n) => Number.isFinite(n));
 
   const qtyByParentId = React.useMemo(() => {
     const m = new Map<number, number>();
@@ -146,19 +151,27 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
     return m;
   }, [usedInRecipeRes?.data]);
 
-  const { data: parentRes } = useList<ProductRow[], HttpError>({
-    resource: "rpt_products_full",
-    filters: parentIds.length ? [{ field: "id", operator: "in", value: parentIds }] : [],
+  const parentIds =
+    (usedInRecipeRes?.data ?? [])
+      .map((r) => Number(r.billbee_bom_id))
+      .filter((n) => Number.isFinite(n)) ?? [];
+
+  const { data: parentRes } = useList<AppProduct[], HttpError>({
+    resource: "app_products",
+    filters: parentIds.length
+      ? [{ field: "id", operator: "in", value: parentIds }]
+      : [],
     pagination: { pageSize: 500 },
-    queryOptions: { enabled: hasNumericId && !!pStrict && !pStrict.is_bom && parentIds.length > 0 },
+    queryOptions: { enabled: hasNumericId && !!p && !p.bb_is_bom && parentIds.length > 0 },
   });
 
-  const usedIn: ParentWithQty[] = toStrict(parentRes?.data as ProductRow[] | undefined).map((b) => ({
-    ...b,
-    qty: qtyByParentId.get(b.id) ?? 1,
-  }));
+  const usedIn =
+    (parentRes?.data as AppProduct[] | undefined)?.map((b) => ({
+      ...b,
+      qty: qtyByParentId.get(Number(b.id)) ?? 1,
+    })) ?? [];
 
-  // Bild-Box
+  /* ---------- Bild-Box dynamisch ---------- */
   const leftRef = React.useRef<HTMLDivElement | null>(null);
   const [imgBoxSize, setImgBoxSize] = React.useState<number | null>(null);
   React.useLayoutEffect(() => {
@@ -169,27 +182,27 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
     updateSize();
     window.addEventListener("resize", updateSize);
     return () => window.removeEventListener("resize", updateSize);
-  }, [pStrict, imageUrl, components.length]);
+  }, [p, imageUrl, components.length]);
 
-  // ------- FORM (nur Extension-Felder) -------
+  /* ---------- FORM (direkt auf app_products schreiben) ---------- */
   const [form] = Form.useForm();
   const editableKeys = React.useMemo(
-    () => (pStrict?.is_bom ? [] : (["supplier_sku", "purchase_details"] as const)),
-    [pStrict?.is_bom],
+    () => (p?.bb_is_bom ? [] : (["supplier_sku", "purchase_details"] as const)),
+    [p?.bb_is_bom],
   );
   type EditableShape = { supplier_sku: string; purchase_details: string };
 
   const initialRef = React.useRef<EditableShape | null>(null);
   React.useEffect(() => {
-    if (!pStrict) return;
+    if (!p) return;
     const init: EditableShape = {
-      supplier_sku: pStrict.supplier_sku ?? "",
-      purchase_details: pStrict.purchase_details ?? "",
+      supplier_sku: p.supplier_sku ?? "",
+      purchase_details: p.purchase_details ?? "",
     };
     initialRef.current = init;
     form.setFieldsValue(init);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pStrict?.id]);
+  }, [p?.id]);
 
   const wExternalSku = Form.useWatch("supplier_sku", form);
   const wPurchaseDetails = Form.useWatch("purchase_details", form);
@@ -234,11 +247,11 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
       const go = await confirmDiscard();
       if (!go) return;
     }
-    router.push(`/artikel/anzeigen/${pStrict?.id}`);
+    router.push(`/artikel/anzeigen/${p?.id}`);
   };
 
   const handleSaveClick = async () => {
-    if (!isDirty || saving || !pStrict) return;
+    if (!isDirty || saving || !p) return;
     const go = await confirmSave();
     if (!go) return;
     form.submit();
@@ -248,15 +261,13 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
     if (!hasNumericId) return;
     setSaving(true);
     try {
-      const payload: Record<string, any> = {
-        [EXT_CONFLICT_KEY]: idNum,
-        supplier_sku: values.supplier_sku ?? null,
-        purchase_details: values.purchase_details ?? null,
-      };
-
       const { error } = await supabaseBrowserClient
-        .from(EXT_TABLE)
-        .upsert(payload, { onConflict: EXT_CONFLICT_KEY });
+        .from("app_products")
+        .update({
+          supplier_sku: values.supplier_sku ?? null,
+          purchase_details: values.purchase_details ?? null,
+        })
+        .eq("id", idNum);
 
       if (error) throw error;
 
@@ -268,7 +279,7 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
       notify?.({
         type: "success",
         message: "Gespeichert",
-        description: "Extension-Daten wurden aktualisiert.",
+        description: "Artikel wurde aktualisiert.",
       });
 
       router.push(`/artikel/anzeigen/${idNum}`);
@@ -283,141 +294,120 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
     }
   };
 
-  const getBillbeeArticleId = (raw?: number | string | null) => {
-    const s = String(raw ?? "").replace(/\D/g, "");
-    if (!s) return null;
-    const last8 = s.slice(-8);
-    const n = parseInt(last8, 10);
-    return Number.isFinite(n) ? String(n) : null;
-  };
+  /* ---------- Einkaufsbestellungen (nur wenn KEIN BOM) ---------- */
+  const [poItems, setPoItems] = React.useState<PoItemRow[]>([]);
+  const [poItemsLoading, setPoItemsLoading] = React.useState(false);
 
-  const buttonClick = (target: "list" | "billbee") => {
-    if (target === "list") {
-      router.push("/artikel");
-      return;
-    }
-    const bbId = getBillbeeArticleId(pStrict?.id);
-    if (bbId) {
-      window.open(`https://app.billbee.io/app_v2/article/${bbId}?copy=false`, "_blank", "noopener,noreferrer");
-    }
-  };
+  const sku = p?.bb_sku ?? null;
+  const isBom = !!p?.bb_is_bom;
 
-  // ======= Einkaufsbestellungen (Positionen) – stabilisiert =======
-  // ======= Einkaufsbestellungen (Positionen) – nur für Nicht-BOM =======
-const [poItems, setPoItems] = React.useState<PoItemRow[]>([]);
-const [poItemsLoading, setPoItemsLoading] = React.useState(false);
+  React.useEffect(() => {
+    let mounted = true;
 
-// Primitive, stabile Dependencies
-const sku = pStrict?.sku ?? null;
-const isBom = !!pStrict?.is_bom;
-
-React.useEffect(() => {
-  let mounted = true;
-
-  const load = async () => {
-    // Früh raus, ohne Loading-Schleife
-    if (!hasNumericId || !sku || isBom) {
-      if (mounted) {
-        setPoItems([]);
-        setPoItemsLoading(false);
-      }
-      return;
-    }
-
-    setPoItemsLoading(true);
-    try {
-      const supabase = supabaseBrowserClient;
-
-      // 1) Positionen holen
-      const [{ data: n }, { data: s }] = await Promise.all([
-        supabase
-          .from("app_purchase_orders_positions_normal")
-          .select("id, order_id, billbee_product_id, qty_ordered, unit_price_net")
-          .eq("billbee_product_id", idNum),
-        supabase
-          .from("app_purchase_orders_positions_special")
-          .select("id, order_id, billbee_product_id, base_model_billbee_product_id, qty_ordered, unit_price_net")
-          .or(`base_model_billbee_product_id.eq.${idNum},billbee_product_id.eq.${idNum}`),
-      ]);
-
-      const combined = [
-        ...(n ?? []).map((r: any) => ({
-          id: r.id as string,
-          order_id: r.order_id as string,
-          qty: Number(r.qty_ordered ?? 0),
-          unit_price_net: typeof r.unit_price_net === "number" ? r.unit_price_net : null,
-          kind: "normal" as const,
-        })),
-        ...(s ?? []).map((r: any) => ({
-          id: r.id as string,
-          order_id: r.order_id as string,
-          qty: Number(r.qty_ordered ?? 0),
-          unit_price_net: typeof r.unit_price_net === "number" ? r.unit_price_net : null,
-          kind: "special" as const,
-        })),
-      ];
-
-      const orderIds = Array.from(new Set(combined.map((x) => x.order_id)));
-      if (!orderIds.length) {
-        if (mounted) setPoItems([]);
+    const load = async () => {
+      if (!hasNumericId || !sku || isBom) {
+        if (mounted) {
+          setPoItems([]);
+          setPoItemsLoading(false);
+        }
         return;
       }
 
-      // 2) Bestellung + Lieferant auflösen
-      const { data: poList } = await supabase
-        .from("app_purchase_orders")
-        .select("id, order_number, supplier_id")
-        .in("id", orderIds);
+      setPoItemsLoading(true);
+      try {
+        const supabase = supabaseBrowserClient;
 
-      const supplierIds = Array.from(new Set((poList ?? []).map((p) => p.supplier_id)));
-      const supplierMap = new Map<string, string>();
-      if (supplierIds.length) {
-        const { data: sup } = await supabase.from("app_suppliers").select("id, name").in("id", supplierIds);
-        (sup ?? []).forEach((s) => supplierMap.set(s.id as string, (s as any).name ?? "—"));
+        // 1) Positionen holen
+        const [{ data: n }, { data: s }] = await Promise.all([
+          supabase
+            .from("app_purchase_orders_positions_normal")
+            .select("id, order_id, billbee_product_id, qty_ordered, unit_price_net")
+            .eq("billbee_product_id", idNum),
+          supabase
+            .from("app_purchase_orders_positions_special")
+            .select("id, order_id, billbee_product_id, base_model_billbee_product_id, qty_ordered, unit_price_net")
+            .or(`base_model_billbee_product_id.eq.${idNum},billbee_product_id.eq.${idNum}`),
+        ]);
+
+        const combined = [
+          ...(n ?? []).map((r: any) => ({
+            id: r.id as string,
+            order_id: r.order_id as string,
+            qty: Number(r.qty_ordered ?? 0),
+            unit_price_net: typeof r.unit_price_net === "number" ? r.unit_price_net : null,
+            kind: "normal" as const,
+          })),
+          ...(s ?? []).map((r: any) => ({
+            id: r.id as string,
+            order_id: r.order_id as string,
+            qty: Number(r.qty_ordered ?? 0),
+            unit_price_net: typeof r.unit_price_net === "number" ? r.unit_price_net : null,
+            kind: "special" as const,
+          })),
+        ];
+
+        const orderIds = Array.from(new Set(combined.map((x) => x.order_id)));
+        if (!orderIds.length) {
+          if (mounted) setPoItems([]);
+          return;
+        }
+
+        // 2) Bestellung + Lieferant auflösen
+        const { data: poList } = await supabase
+          .from("app_purchase_orders")
+          .select("id, order_number, supplier_id")
+          .in("id", orderIds);
+
+        const supplierIds = Array.from(new Set((poList ?? []).map((p) => p.supplier_id)));
+        const supplierMap = new Map<string, string>();
+        if (supplierIds.length) {
+          const { data: sup } = await supabase
+            .from("app_suppliers")
+            .select("id, name")
+            .in("id", supplierIds);
+          (sup ?? []).forEach((s) => supplierMap.set(s.id as string, (s as any).name ?? "—"));
+        }
+
+        const poMap = new Map<string, { order_number: string; supplier_name: string }>();
+        (poList ?? []).forEach((p) =>
+          poMap.set(p.id as string, {
+            order_number: (p as any).order_number ?? "—",
+            supplier_name: supplierMap.get((p as any).supplier_id as string) ?? "—",
+          }),
+        );
+
+        const rows: PoItemRow[] = combined.map((c) => ({
+          id: c.id,
+          order_id: c.order_id,
+          order_number: poMap.get(c.order_id)?.order_number ?? "—",
+          supplier_name: poMap.get(c.order_id)?.supplier_name ?? "—",
+          internal_sku: sku ?? "—",
+          qty: c.qty,
+          unit_price_net: c.unit_price_net,
+          kind: c.kind,
+        }));
+
+        if (mounted) setPoItems(rows);
+      } finally {
+        if (mounted) setPoItemsLoading(false);
       }
+    };
 
-      const poMap = new Map<string, { order_number: string; supplier_name: string }>();
-      (poList ?? []).forEach((p) =>
-        poMap.set(p.id as string, {
-          order_number: (p as any).order_number ?? "—",
-          supplier_name: supplierMap.get((p as any).supplier_id as string) ?? "—",
-        }),
-      );
-
-      const rows: PoItemRow[] = combined.map((c) => ({
-        id: c.id,
-        order_id: c.order_id,
-        order_number: poMap.get(c.order_id)?.order_number ?? "—",
-        supplier_name: poMap.get(c.order_id)?.supplier_name ?? "—",
-        internal_sku: sku ?? "—",
-        qty: c.qty,
-        unit_price_net: c.unit_price_net,
-        kind: c.kind,
-      }));
-
-      if (mounted) setPoItems(rows);
-    } finally {
-      if (mounted) setPoItemsLoading(false);
-    }
-  };
-
-  load();
-  return () => {
-    mounted = false;
-  };
-  // Stabile Primitives verhindern Re-Trigger „aus Versehen“
-}, [hasNumericId, idNum, sku, isBom]);
-
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, [hasNumericId, idNum, sku, isBom]);
 
   return (
     <Card
-      title={`Artikel bearbeiten: ${pStrict?.sku ?? "—"}`}
+      title={`Artikel bearbeiten: ${p?.bb_sku ?? "—"}`}
       extra={
         <Space>
-          <Button onClick={() => buttonClick("list")}>Übersicht</Button>
-          <Button onClick={() => buttonClick("billbee")}>Billbee</Button>
-          {pStrict?.id && <Button onClick={handleCancelClick}>Abbrechen</Button>}
-          <Button type="primary" onClick={handleSaveClick} disabled={!isDirty || saving || !pStrict} loading={saving}>
+          <Button onClick={() => router.push("/artikel")}>Übersicht</Button>
+          {p?.id && <Button onClick={() => window.open(`https://app.billbee.io/app_v2/article/${p.id}?copy=false`, "_blank")}>Billbee</Button>}
+          {p?.id && <Button onClick={handleCancelClick}>Abbrechen</Button>}
+          <Button type="primary" onClick={handleSaveClick} disabled={!isDirty || saving || !p} loading={saving}>
             Speichern
           </Button>
         </Space>
@@ -428,20 +418,20 @@ React.useEffect(() => {
         <Col xs={24} md={16}>
           <div ref={leftRef}>
             <Descriptions column={1} bordered size="small" labelStyle={{ width: 260 }} title="Allgemein">
-              <Descriptions.Item label="SKU">{pStrict?.sku ?? "—"}</Descriptions.Item>
+              <Descriptions.Item label="SKU">{p?.bb_sku ?? "—"}</Descriptions.Item>
+              <Descriptions.Item label="Name">{p?.bb_name ?? "—"}</Descriptions.Item>
               <Descriptions.Item label="Kategorien">
-                {[pStrict?.category1, pStrict?.category2, pStrict?.category3].filter(Boolean).join(" / ") || "—"}
+                {[p?.bb_category1, p?.bb_category2, p?.bb_category3].filter(Boolean).join(" / ") || "—"}
               </Descriptions.Item>
               <Descriptions.Item label="Status">
                 <span style={{ display: "inline-flex", gap: 8 }}>
-                  {pStrict?.is_active ? <Tag color="green">aktiv</Tag> : <Tag>inaktiv</Tag>}
-                  {pStrict?.is_bom ? <Tag color="blue">BOM</Tag> : <Tag>Komponente</Tag>}
+                  {p?.bb_is_active ? <Tag color="green">aktiv</Tag> : <Tag>inaktiv</Tag>}
+                  {p?.bb_is_bom ? <Tag color="blue">BOM</Tag> : <Tag>Komponente</Tag>}
                 </span>
               </Descriptions.Item>
-              <Descriptions.Item label="Zeitstempel (dezent)">
+              <Descriptions.Item label="Erstellt am">
                 <span style={{ color: "#999" }}>
-                  Mirror angelegt: {pStrict?.product_created_at ?? "—"} · Extension aktualisiert:{" "}
-                  {pStrict?.ext_updated_at ?? "—"}
+                  {p?.created_at ? new Date(p.created_at).toLocaleString("de-DE") : "—"}
                 </span>
               </Descriptions.Item>
             </Descriptions>
@@ -456,12 +446,7 @@ React.useEffect(() => {
           >
             {imageUrl ? (
               <div style={{ position: "relative", width: imgBoxSize ?? 320, height: imgBoxSize ?? 320, maxWidth: "100%" }}>
-                <Image
-                  src={imageUrl}
-                  alt={pStrict?.name ?? "Produktbild"}
-                  fill
-                  style={{ objectFit: "cover", borderRadius: 8 }}
-                />
+                <Image src={imageUrl} alt={p?.bb_name ?? p?.bb_sku ?? "Produktbild"} fill style={{ objectFit: "cover", borderRadius: 8 }} />
               </div>
             ) : (
               "—"
@@ -472,12 +457,12 @@ React.useEffect(() => {
 
       <Divider />
 
-      {/* Einkauf – gleiche Struktur */}
+      {/* Einkauf – editierbar nur wenn KEIN BOM */}
       <Form form={form} layout="vertical" onFinish={onFinish} requiredMark={false}>
         <Descriptions column={1} bordered size="small" labelStyle={{ width: 260 }} title="Einkauf">
-          <Descriptions.Item label="Hersteller">{pStrict?.manufacturer ?? "—"}</Descriptions.Item>
+          <Descriptions.Item label="Lieferant">{p?.fk_bb_supplier ?? "—"}</Descriptions.Item>
           <Descriptions.Item label="EK (netto)">{currency(ekNetto)}</Descriptions.Item>
-          {!pStrict?.is_bom && (
+          {!p?.bb_is_bom && (
             <>
               <Descriptions.Item label="Externe Art.-Nr.">
                 <Form.Item name="supplier_sku" style={{ margin: 0 }}>
@@ -494,12 +479,12 @@ React.useEffect(() => {
         </Descriptions>
       </Form>
 
-      {/* Verwendet in … */}
-      {!pStrict?.is_bom && (
+      {/* Verwendet in … (nur Komponente) */}
+      {!p?.bb_is_bom && (
         <>
           <Divider />
           <Card title={`Verwendet in … ${usedIn?.length ? `(${usedIn.length})` : ""}`}>
-            <Table<ParentWithQty>
+            <Table<AppProduct & { qty: number }>
               rowKey={(r) => String(r.id)}
               dataSource={usedIn}
               pagination={false}
@@ -509,15 +494,17 @@ React.useEffect(() => {
                   title: "Bild",
                   dataIndex: "id",
                   width: 72,
-                  render: (_: any, r) => <UsedInImageCell id={r.id} alt={r.name ?? r.sku ?? "Bild"} />,
+                  render: (_: any, r) => (
+                    <UsedInImageCell id={Number(r.id)} alt={r.bb_name ?? r.bb_sku ?? "Bild"} />
+                  ),
                 },
                 {
                   title: "SKU",
-                  dataIndex: "sku",
+                  dataIndex: "bb_sku",
                   width: 160,
-                  render: (_: any, r) => <Link href={`/artikel/anzeigen/${r.id}`}>{r.sku ?? "—"}</Link>,
+                  render: (_: any, r) => <Link href={`/artikel/anzeigen/${r.id}`}>{r.bb_sku ?? "—"}</Link>,
                 },
-                { title: "Name", dataIndex: "name", ellipsis: true },
+                { title: "Name", dataIndex: "bb_name", ellipsis: true },
                 { title: "Menge", dataIndex: "qty", width: 100, render: (v: number) => v ?? 1 },
               ]}
               locale={{ emptyText: "Keine Zuordnungen gefunden." }}
@@ -527,23 +514,23 @@ React.useEffect(() => {
       )}
 
       {/* BOM – Komponenten */}
-      {pStrict?.is_bom && (
+      {p?.bb_is_bom && (
         <>
           <Divider />
           <Card title="BOM – Komponenten">
-            <Table<ComponentWithQty>
+            <Table<AppProduct & { qty: number }>
               rowKey={(r) => String(r.id)}
               dataSource={components}
               pagination={false}
               size="small"
               columns={[
-                { title: "SKU", dataIndex: "sku", width: 160 },
-                { title: "Name", dataIndex: "name", ellipsis: true },
-                { title: "Hersteller", dataIndex: "manufacturer", width: 160 },
+                { title: "SKU", dataIndex: "bb_sku", width: 160 },
+                { title: "Name", dataIndex: "bb_name", ellipsis: true },
+                { title: "Lieferant", dataIndex: "fk_bb_supplier", width: 160 },
                 { title: "Menge", dataIndex: "qty", width: 100, render: (v: number) => v ?? 1 },
                 {
                   title: "EK (netto) je",
-                  dataIndex: "net_purchase_price",
+                  dataIndex: "bb_net_purchase_price",
                   width: 140,
                   render: (v: number | null) => currency(v),
                 },
@@ -551,7 +538,7 @@ React.useEffect(() => {
                   title: "EK (netto) gesamt",
                   key: "row_total",
                   width: 160,
-                  render: (_: any, r) => currency((r.qty ?? 1) * Number(r.net_purchase_price ?? 0)),
+                  render: (_: any, r) => currency((r.qty ?? 1) * Number(r.bb_net_purchase_price ?? 0)),
                 },
                 { title: "Externe Art.-Nr.", dataIndex: "supplier_sku", width: 180, ellipsis: true },
                 {
@@ -573,8 +560,8 @@ React.useEffect(() => {
         </>
       )}
 
-      {/* Einkaufsbestellungen – nur anzeigen, wenn KEIN BOM */}
-      {!pStrict?.is_bom && (
+      {/* Einkaufsbestellungen – nur wenn KEIN BOM */}
+      {!p?.bb_is_bom && (
         <>
           <Divider />
           <Card title={`Einkaufsbestellungen${poItems.length ? ` (${poItems.length})` : ""}`}>
