@@ -10,7 +10,7 @@ import { useShow, useList } from "@refinedev/core";
 import type { Tables } from "@/types/supabase";
 import type { HttpError } from "@refinedev/core";
 import { supabaseBrowserClient } from "@/utils/supabase/client";
-import SyncStockSingleProductButton from "@components/artikel/SyncStockSingleProductButton";
+import SyncStockSingleProductButton from "@/components/artikel/SyncStockSingleProductButton";
 
 /* ---------- Typen ---------- */
 type AppProduct = Tables<"app_products">;
