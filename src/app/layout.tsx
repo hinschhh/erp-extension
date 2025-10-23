@@ -15,6 +15,7 @@ import { authProviderClient } from "../providers/auth-provider/auth-provider.cli
 import { supabaseBrowserClient } from "@utils/supabase/client";
 import resources from "@resources/index";
 import { notificationProvider } from "@refinedev/antd";
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   // Color-Scheme nur clientseitig bestimmen
   const prefersDark =

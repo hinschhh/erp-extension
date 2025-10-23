@@ -1,120 +1,112 @@
 import { IResourceItem } from "@refinedev/core";
-import { BarcodeOutlined, ShoppingCartOutlined, TagsOutlined, ToolOutlined } from "@ant-design/icons";
+import {
+  ShoppingCartOutlined,
+  TagsOutlined,
+  ShopOutlined,
+  GoldOutlined
+} from "@ant-design/icons";
 
-
+/**
+ * Leitlinien:
+ * - name  = stabiler, englischer Identifier (für DataProvider / useList/useShow)
+ * - label = deutsch (UI)
+ * - Routen = deutsch (Next.js App Router)
+ * - parentName nutzt die Sektion "einkauf" bzw. "artikel"
+ *
+ * Entfernt:
+ * - "Artikelübersicht" (Redundanz zu "Artikel")
+ * - Inkonsistente/leer definierte Ressourcen
+ */
 const resources: IResourceItem[] = [
-/*{
-  "name": "produktion",
-  "list": "/produktion",
-  "create": "/produktion/anlegen",
-  "show": "/produktion/anzeigen/:id",
-  "edit": "/produktion/bearbeiten/:id",
-  icon: <ToolOutlined/> ,
-  options: {
-    label: "Produktion",
-  }
-},
-{
-    "name": "Übersicht Produktionsaufträge",
-    "list": "/produktion",
-    "parentName": "produktion",
-    options: {
-      label: "Übersicht Produktionsaufträge",
-    }
-},
-{
-    "name": "Lackiererei",
-    "list": "/produktion/lackiererei",
-    "parentName": "produktion",
-    options: {
-      label: "Lackiererei",
-    }
-},
-{
-    "name": "Tischlerei",
-    "list": "/produktion/tischlerei",
-    "parentName": "produktion",
-    options: {
-      label: "Tischlerei",
-    }
-},*/
-{
-  "name": "einkauf",
-  "list": "/einkauf",
-  "create": "/einkauf/create",
-  "show": "/einkauf/show/:id",
-  "edit": "/einkauf/edit/:id",
-  icon: <ShoppingCartOutlined/> ,
-  options: {
-    label: "Einkauf",
-  }
-},
-{
-    "name": "Bestellungen",
-    "list": "/einkauf/bestellungen",
-    "create": "/einkauf/bestellungen/anlegen",
-    "edit": "/einkauf/bestellungen/bearbeiten/:id",
-    "parentName": "einkauf",
-    options: {
-      label: "Bestellungen",
-    }
-},
-{
-    "name": "Bestellvorschläge",
-    "list": "/einkauf/bestellvorschlaege",
-    "parentName": "einkauf",
-    options: {
-      label: "Bestellvorschläge",
-    }
-},
+  // ── Sektion: Einkauf (nur Navigation/Gruppe)
+  {
+    name: "einkauf",
+    list: "/einkauf",
+    icon: <ShoppingCartOutlined />,
+    options: { label: "Einkauf" },
+  },
 
-{
-    "name": "lieferanten",
-    "list": "/einkauf/lieferanten",
-    "create": "/einkauf/lieferanten/anlegen",
-    "edit": "/einkauf/lieferanten/bearbeiten/:id",
-    "parentName": "einkauf",
-    options: {
-    label: "Lieferanten",
-  }
-},
-{
-    "name": "Wareneingang",
-    "list": "/einkauf/wareneingang",
-    "parentName": "einkauf",
-    options: {
-      label: "Wareneingang",
-      icon: <BarcodeOutlined />,
-    }
-},
-{
-  "name": "Artikel",
-  "list": "/artikel",
-  "show": "/artikel/anzeigen/:id",
-  "edit": "/artikel/bearbeiten/:id",
-  icon: <TagsOutlined/> ,
-  options: {
-    label: "Artikel",
-  }
-},
-{
-  "name": "Artikelübersicht", 
-  "list": "/artikel",
-  "parentName": "Artikel",
-  options: {
-    label: "Artikelübersicht",
-  }
-},
-{
-    "name": "Inventur",
-    "list": "/artikel/inventur",
-    "parentName": "Artikel",
-    options: {
-      label: "Inventur",
-    }
-},
-{"name": "bom_recipes",}
-]
+  // Bestellungen (DB: purchase_orders)
+  {
+    name: "app_purchase_orders",
+    list: "/einkauf/bestellungen",
+    create: "/einkauf/bestellungen/anlegen",
+    show: "/einkauf/bestellungen/anzeigen/:id",
+    edit: "/einkauf/bestellungen/bearbeiten/:id",
+    parentName: "einkauf",
+    options: { label: "Bestellungen" },
+  },
 
+  // Bestellvorschläge (falls eigener Screen, optional DB-Resource)
+  {
+    name: "purchase_order_suggestions",
+    list: "/einkauf/bestellvorschlaege",
+    parentName: "einkauf",
+    meta: { label: "Bestellvorschläge" },
+  },
+
+  // Lieferanten (DB: app_suppliers)
+  {
+    name: "app_suppliers",
+    list: "/einkauf/lieferanten",
+    create: "/einkauf/lieferanten/anlegen",
+    show: "/einkauf/lieferanten/anzeigen/:id",
+    edit: "/einkauf/lieferanten/bearbeiten/:id",
+    parentName: "einkauf",
+    options: { label: "Lieferanten" },
+  },
+
+  // ── Sektion: Artikel (nur Navigation/Gruppe)
+  {
+    name: "artikel",
+    list: "/artikel",
+    show: "/artikel/anzeigen/:id",
+    edit: "/artikel/bearbeiten/:id",
+    icon: <TagsOutlined />,
+    options: { label: "Artikel" },
+  },
+
+  // Artikelübersicht / Produkte (DB: articles oder products; ggf. anpassen)
+  {
+    name: "articles",
+    list: "/artikel",
+    show: "/artikel/anzeigen/:id",
+    edit: "/artikel/bearbeiten/:id",
+    parentName: "artikel",
+    options: { label: "Artikelübersicht" },
+  },
+
+  {
+    name: "lager",
+    options: { label: "Lager" },
+    icon: <GoldOutlined />,
+  },
+  // Inventur (eigene Resource/Seite)
+  {
+    name: "inventory",
+    list: "/lager/inventur",
+    parentName: "lager",
+    options: { label: "Inventur" },
+  },
+
+    // Wareneingang (eigene Seite; wenn DB-Resource vorhanden -> Identifier hier angleichen)
+  {
+    name: "app_inbound_shipments",
+    list: "/lager/wareneingang",
+    create: "/lager/wareneingang/anlegen",
+    show: "/lager/wareneingang/anzeigen/:id",
+    edit: "/lager/wareneingang/bearbeiten/:id",
+    parentName: "lager",
+    options: { label: "Wareneingang" },
+  },
+    // ── Sektion: Aufträge (nur Navigation/Gruppe)
+  {
+    name: "auftraege",
+    list: "/auftraege",
+    icon: <ShopOutlined />,
+    options: { label: "Aufträge" },
+  }
+
+];
 
 export default resources;
