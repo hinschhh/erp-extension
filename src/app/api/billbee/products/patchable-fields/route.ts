@@ -4,8 +4,8 @@ const BILLBEE_BASE = "https://app.billbee.io/api/v1";
 
 function authHeaders() {
   const key = process.env.BILLBEE_API_KEY!;
-  const user = process.env.BILLBEE_USERNAME!;
-  const pass = process.env.BILLBEE_API_PASSWORD!;
+  const user = process.env.BILLBEE_LOGIN!;
+  const pass = process.env.BILLBEE_PASSWORD!;
   const basic = Buffer.from(`${user}:${pass}`).toString("base64");
   return {
     "X-Billbee-Api-Key": key,

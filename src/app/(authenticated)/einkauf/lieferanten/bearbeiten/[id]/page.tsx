@@ -392,7 +392,7 @@ function ContactFormDrawer({
         layout="vertical"
         initialValues={initialValues}
         onFinish={async (values) => {
-          if (!isEdit && !values.supplier_id) {
+          if (!isEdit && !values.fk_bb_supplier) {
             return message.error("Supplier-ID fehlt");
           }
           await onFinish?.(values as any);

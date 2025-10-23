@@ -49,7 +49,7 @@ function requiredEnv(name: string): string {
 
 function buildHeaders() {
   const apiKey = requiredEnv("BILLBEE_API_KEY");
-  const username = requiredEnv("BILLBEE_USERNAME");
+  const username = requiredEnv("BILLBEE_LOGIN");
   const apiPassword = requiredEnv("BILLBEE_API_PASSWORD");
   const basic = Buffer.from(`${username}:${apiPassword}`).toString("base64");
 

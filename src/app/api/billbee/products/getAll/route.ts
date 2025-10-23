@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
         Authorization:
           "Basic " +
           Buffer.from(
-            `${process.env.BILLBEE_USERNAME}:${process.env.BILLBEE_API_PASSWORD}`
+            `${process.env.BILLBEE_LOGIN}:${process.env.BILLBEE_PASSWORD}`
           ).toString("base64"),
         "Content-Type": "application/json",
       },

@@ -19,11 +19,11 @@ type PurchaseOrderRow     = DB["public"]["Tables"]["app_purchase_orders"]["Row"]
 
 type PoNormalRow = PoNormalRowBase & {
   ref_billbee_products_mirror?: { sku?: string } | null;
-  app_purchase_orders?: Pick<PurchaseOrderRow, "invoice_number" | "order_number" | "supplier_id"> | null;
+  app_purchase_orders?: Pick<PurchaseOrderRow, "invoice_number" | "order_number" | "supplier"> | null;
 };
 type PoSpecialRow = PoSpecialRowBase & {
   ref_billbee_products_mirror?: { sku?: string } | null;
-  app_purchase_orders?: Pick<PurchaseOrderRow, "invoice_number" | "order_number" | "supplier_id"> | null;
+  app_purchase_orders?: Pick<PurchaseOrderRow, "invoice_number" | "order_number" | "supplier"> | null;
 };
 
 export default function InboundShipmentCreatePage() {
@@ -166,7 +166,7 @@ export default function InboundShipmentCreatePage() {
 
       // --- Header einfügen ---
       const header: InboundShipmentInsert = {
-        supplier_id: values.supplier_id,
+        fk_bb_supplier: values.supplier_id,
         delivery_note_no: values.delivery_note_no ?? null,
         note: values.note ?? null,
         arrived_at: values.arrived_at ? (values.arrived_at as dayjs.Dayjs).toDate().toISOString() : undefined,

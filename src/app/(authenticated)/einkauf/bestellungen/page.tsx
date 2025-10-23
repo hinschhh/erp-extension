@@ -19,7 +19,7 @@ export default function EinkaufsBestellungenÜbersicht() {
     filters: { mode: "server" },
   })
 
-  const supplierIds = tableProps?.dataSource?.map((item) => item.supplier_id) ?? [];
+  const supplierIds = tableProps?.dataSource?.map((item) => item.supplier).filter((id): id is string => id !== null) ?? [];
 
 
   const {
@@ -35,7 +35,7 @@ export default function EinkaufsBestellungenÜbersicht() {
 
   const { selectProps: supplierSelectProps } = useSelect<Supplier>({
     resource: "app_suppliers",
-    optionLabel: "name",
+    optionLabel: "id",
     optionValue: "id",
   });
 
@@ -66,7 +66,7 @@ export default function EinkaufsBestellungenÜbersicht() {
               return <div>Loading...</div>;
             }
             const supplier = suppliersData?.data.find((item: Supplier) => item.id === value);
-            return <div>{supplier?.name || "-"}</div>;
+            return <div>{supplier?.id || "-"}</div>;
           }}
           filterDropdown={(props) => (
             <FilterDropdown {...props}>

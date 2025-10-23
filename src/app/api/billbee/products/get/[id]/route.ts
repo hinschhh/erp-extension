@@ -3,8 +3,8 @@ import { NextResponse } from "next/server";
 
 const BILLBEE_BASE = process.env.NEXT_PUBLIC_BILLBEE_API_URL ?? "https://api.billbee.io/api/v1";
 const BILLBEE_API_KEY = process.env.BILLBEE_API_KEY!;
-const BILLBEE_USER = process.env.BILLBEE_USERNAME!;
-const BILLBEE_PASSWORD = process.env.BILLBEE_API_PASSWORD!;
+const BILLBEE_USER = process.env.BILLBEE_LOGIN!;
+const BILLBEE_PASSWORD = process.env.BILLBEE_PASSWORD!;
 
 const authHeader = "Basic " + Buffer.from(`${BILLBEE_USER}:${BILLBEE_PASSWORD}`).toString("base64");
 

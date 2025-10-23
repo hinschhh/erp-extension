@@ -313,24 +313,16 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
         // 2) Bestellungen & Lieferanten auflösen
         const { data: poList } = await supabase
           .from("app_purchase_orders")
-          .select("id, order_number, supplier_id")
+          .select("id, order_number, supplier")
           .in("id", orderIds);
 
-        const supplierIds = Array.from(new Set((poList ?? []).map((p) => p.supplier_id)));
-        const supplierMap = new Map<string, string>();
-        if (supplierIds.length) {
-          const { data: sup } = await supabase
-            .from("app_suppliers")
-            .select("id, name")
-            .in("id", supplierIds);
-          (sup ?? []).forEach((s) => supplierMap.set(s.id as string, (s as any).name ?? "—"));
-        }
+        const supplierIds = Array.from(new Set((poList ?? []).map((p) => (p as any).supplier_id)));
 
         const poMap = new Map<string, { order_number: string; supplier_name: string }>();
         (poList ?? []).forEach((p) =>
           poMap.set(p.id as string, {
             order_number: (p as any).order_number ?? "—",
-            supplier_name: supplierMap.get((p as any).supplier_id as string) ?? "—",
+            supplier_name: ((p as any).supplierIds as string) ?? "—",
           }),
         );
 

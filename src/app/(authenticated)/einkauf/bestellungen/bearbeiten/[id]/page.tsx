@@ -15,8 +15,7 @@ type PoItemNormal = Tables<"app_purchase_orders_positions_normal">;
 type PoItemSpecial = Tables<"app_purchase_orders_positions_special">;
 
 type Supplier = Tables<"app_suppliers">;
-type ProductExtension = Tables<"ref_billbee_product_extension">;
-type ProductMirror = Tables<"ref_billbee_products_mirror">;
+type Product = Tables<"app_products">;
 
 export default function EinkaufsBestellungenBearbeiten() {
 
@@ -56,8 +55,11 @@ const {
         ]
     },
     meta: {
-        select: "*, ref_billbee_products_mirror(sku)",
-    }
+        select: "*, app_products(bb_sku)",
+    },
+    queryOptions: {
+        enabled: !!formProps.initialValues?.fk_bb_supplier,
+    },
 });
 
 const {
@@ -80,9 +82,9 @@ const {
 
 const supplierName = useOne<Supplier>({
     resource: "app_suppliers",
-    id: formProps.initialValues?.supplier_id,
+    id: formProps.initialValues?.id,
     queryOptions: {
-        enabled: !!formProps.initialValues?.supplier_id,
+        enabled: !!formProps.initialValues?.id,
     },
 });
 
@@ -96,18 +98,18 @@ const productIds = Array.from(
 );
 
 
-const { data: productsRes, isLoading: productsLoading } = useMany<ProductExtension>({
-  resource: "ref_billbee_product_extension",
+const { data: productsRes, isLoading: productsLoading } = useMany<Product>({
+  resource: "app_products",
   ids: productIds,
   meta: {
-    idColumnName: "billbee_product_id",                 // <<< wichtig
-    select: "billbee_product_id,supplier_sku,purchase_details",
+    idColumnName: "id",                 // <<< wichtig
+    select: "id,supplier_sku,purchase_details",
   },
   queryOptions: { enabled: productIds.length > 0 },
 });
 
 const productsById = useMemo(() => {
-  const m = new Map<number | string, ProductExtension>();
+  const m = new Map<number | string, Product>();
   productsRes?.data?.forEach((p: any) => m.set(p.billbee_product_id, p));
   return m;
 }, [productsRes?.data]);
@@ -122,14 +124,14 @@ const statusOptions = Object.entries(statusMap ?? {}).map(([value, cfg]) => ({
   ),
 }));
 
-const selectProducts = useSelect<ProductMirror>({
-    resource: "ref_billbee_products_mirror",
-    optionLabel: "sku",
+const selectProducts = useSelect<Product>({
+    resource: "app_products",
+    optionLabel: "bb_sku",
     optionValue: "id",
     filters: [
-        { field: "supplier_id",
+        { field: "fk_bb_supplier",
           operator: "eq",
-          value: formProps.initialValues?.supplier_id?.toString() || "",
+          value: formProps.initialValues?.fk_bb_supplier?.toString() || "",
         },
     ]
 });
@@ -167,7 +169,7 @@ return (
                 <Input disabled />
             </Form.Item>
             <Form.Item label="Hersteller">
-                <Input disabled value={supplierName.data?.data?.name} />
+                <Input disabled value={supplierName.data?.data?.id} />
             </Form.Item>
             <div style={{ paddingTop: 8 }}>
                 <PoStatusTag status={formProps.initialValues?.status || "draft"} />
@@ -215,7 +217,7 @@ return (
                         render={(value, record: any) => {
                             if (isEditingEditableTableNormal(record.id)) {
                                     return (
-                                        <Form.Item name="ref_billbee_products_mirror(sku)" initialValue={value} style={{ margin: 0 }}>
+                                        <Form.Item name="app_products(bb_sku)" initialValue={value} style={{ margin: 0 }}>
                                             <Select
                                                 {...selectProducts}
                                                 filterOption={(input, option) =>
@@ -227,7 +229,7 @@ return (
                                         </Form.Item>
                                     );
                                 }
-                            return record?.ref_billbee_products_mirror?.sku ?? "—";
+                            return record?.app_products?.bb_sku ?? "—";
                     }}
                     />
                     <Table.Column title="Status" dataIndex="po_item_status" 

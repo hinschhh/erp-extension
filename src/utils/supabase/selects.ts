@@ -8,13 +8,13 @@ export type Option = { label: string; value: string | number };
 
 export async function fetchSupplierOptions(search?: string): Promise<Option[]> {
 const supabase = supabaseBrowserClient;
-let q = supabase.from("app_suppliers").select("id,name").eq("active", true).limit(50);
+let q = supabase.from("app_suppliers").select("id").eq("active", true).limit(50);
 if (search) {
 q = q.ilike("name", `%${search}%`);
 }
 const { data, error } = await q;
 if (error) throw error;
-return (data ?? []).map((r) => ({ label: r.name ?? r.id, value: r.id }));
+return (data ?? []).map((r) => ({ label: r.id ?? r.id, value: r.id }));
 }
 
 

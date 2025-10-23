@@ -17,8 +17,8 @@ export async function POST(req: Request) {
     }
 
     const apiKey = process.env.BILLBEE_API_KEY;
-    const username = process.env.BILLBEE_USERNAME;
-    const apiPassword = process.env.BILLBEE_API_PASSWORD;
+    const username = process.env.BILLBEE_LOGIN;
+    const apiPassword = process.env.BILLBEE_PASSWORD;
 
     if (!apiKey || !username || !apiPassword) {
       return NextResponse.json(
