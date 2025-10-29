@@ -4,10 +4,10 @@ import { useEditableTable, useSelect, EditButton, SaveButton, TextField, NumberF
 import { Form, Table, Button, Space, Input, DatePicker, Tooltip, Modal, Card } from "antd";
 import { CloseOutlined, FileTextOutlined } from "@ant-design/icons";
 import { Tables } from "@/types/supabase";
- import { PoItemStatusTag } from "@components/common/tags/states/po_item";
- import SelectStatePoItem from "@components/common/selects/state_po-item";
- 
- import { formatCurrencyEUR, parseNumber } from "@/utils/formats";
+import { PoItemStatusTag } from "@components/common/tags/states/po_item";
+import SelectStatePoItem from "@components/common/selects/state_po-item";
+import dayjs from "dayjs"; 
+import { formatCurrencyEUR, parseNumber } from "@/utils/formats";
 import { PoItemStatus } from "@/types/status";
 import ButtonEinkaufBestellpositionenSpezialHinzufuegen from "./modals/special";
 import SketchConfirmButton from "@components/common/buttons/confirmSketchButton";
@@ -97,13 +97,14 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                               return (
                                 <Form.Item
                                   name="dol_planned_at"
+                                  getValueProps={(v) => ({ value: v ? dayjs(v) : null })}
                                   style={{ margin: 0 }}
                                 >
                                   <DatePicker type="date" placeholder="Datum wählen..." format="DD.MM.YYYY" style={{ width: "100%" }} />
                                 </Form.Item>
                               );
                             }
-                            return <DateField value={value} />;
+                            return <DateField value={dayjs(value)} />;
                           }}/>
             <Table.Column title="Ext. SKU" dataIndex="supplier_sku" 
                 render={(value, record: PoItemSpecial) => {

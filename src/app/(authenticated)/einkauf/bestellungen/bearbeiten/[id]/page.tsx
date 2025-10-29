@@ -86,7 +86,7 @@ export default function EinkaufsBestellungenBearbeiten() {
               <Input />
             </Form.Item>
 
-            <Form.Item label="Rechnungsdatum" name="invoice_date">
+            <Form.Item label="Rechnungsdatum" getValueProps={(v) => ({ value: v ? dayjs(v) : null })} name="invoice_date">
               <DatePicker type="date" placeholder="Datum wählen..." format="DD.MM.YYYY" style={{ width: "100%" }} />
             </Form.Item>
 

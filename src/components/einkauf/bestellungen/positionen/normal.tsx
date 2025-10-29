@@ -12,7 +12,7 @@
  } from "@refinedev/antd";
  import { Button, Card, DatePicker, Form, Input, Select, Space, Table } from "antd";
  import { CloseOutlined } from "@ant-design/icons";
- 
+ import dayjs from "dayjs"; 
  import { Tables } from "@/types/supabase";
  import { PoItemStatusTag } from "@components/common/tags/states/po_item";
  import SelectStatePoItem from "@components/common/selects/state_po-item";
@@ -134,13 +134,14 @@
                   return (
                     <Form.Item
                       name="dol_planned_at"
+                      getValueProps={(v) => ({ value: v ? dayjs(v) : null })}
                       style={{ margin: 0 }}
                     >
                       <DatePicker type="date" placeholder="Datum wählen..." format="DD.MM.YYYY" style={{ width: "100%" }} />
                     </Form.Item>
                   );
                 }
-                return <DateField value={value} />;
+                return <DateField value={dayjs(value)} />;
               }}
             />
 
