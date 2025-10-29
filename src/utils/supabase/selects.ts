@@ -6,7 +6,7 @@ import { supabaseBrowserClient } from "@/utils/supabase/client";
 export type Option = { label: string; value: string | number };
 
 
-export async function fetchSupplierOptions(search?: string): Promise<Option[]> {
+async function fetchSupplierOptions(search?: string): Promise<Option[]> {
 const supabase = supabaseBrowserClient;
 let q = supabase.from("app_suppliers").select("id").eq("active", true).limit(50);
 if (search) {
@@ -18,7 +18,7 @@ return (data ?? []).map((r) => ({ label: r.id ?? r.id, value: r.id }));
 }
 
 
-export async function fetchBillbeeProductOptions(search?: string): Promise<Option[]> {
+async function fetchBillbeeProductOptions(search?: string): Promise<Option[]> {
 const supabase = supabaseBrowserClient;
 let q = supabase
 .from("ref_billbee_products_mirror")

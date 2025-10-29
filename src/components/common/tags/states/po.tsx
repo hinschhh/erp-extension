@@ -11,7 +11,7 @@ import {
   ExclamationCircleOutlined,
 } from "@ant-design/icons";
 
-const statusMap: Record<
+export const statusMap: Record<
   string,
   { color: string; label: string; icon: React.ReactNode }
 > = {

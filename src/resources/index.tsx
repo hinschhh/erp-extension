@@ -99,13 +99,7 @@ const resources: IResourceItem[] = [
     parentName: "lager",
     options: { label: "Wareneingang" },
   },
-    // ── Sektion: Aufträge (nur Navigation/Gruppe)
-  {
-    name: "auftraege",
-    list: "/auftraege",
-    icon: <ShopOutlined />,
-    options: { label: "Aufträge" },
-  }
+
 
 ];
 
