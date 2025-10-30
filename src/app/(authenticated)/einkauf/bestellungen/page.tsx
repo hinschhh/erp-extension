@@ -14,7 +14,7 @@ export default function EinkaufsBestellungenÜbersicht() {
 
 
   const { tableProps, sorters, filters } = useTable<Po>({
-    resource: "app_purchase_orders_list_view",
+    resource: "app_purchase_orders_view",
     meta: { select: "*" },
     sorters: { initial: [{ field: "created_at", order: "desc" }], mode: "server" },
     filters: { initial: [{field: "status", operator: "ne", value: "delivered"}], mode: "server" },
@@ -55,18 +55,18 @@ export default function EinkaufsBestellungenÜbersicht() {
           />
           <Table.Column title="Rechnungsnummer" dataIndex="invoice_number" sorter 
           />
-          <Table.Column title="Summe" dataIndex="items_amount_net_all" sorter render={(value, _) => formatCurrencyEUR(value)}/>
+          <Table.Column title="Summe" dataIndex="total_amount_net" sorter render={(value, _) => formatCurrencyEUR(value)}/>
           <Table.Column title="Unbestätigte Skizzen" dataIndex="sketch_unconfirmed_cnt" sorter render={(value, _) => {
             if (value && value > 0) {
               return value;
             }
             return "-";
           }}/>
-          <Table.Column title="Anmerkungen" dataIndex="internal_notes" />
+          <Table.Column title="Anmerkungen" dataIndex="notes" />
           <Table.Column title="Aktionen" dataIndex="actions" render={(_, record) => (
             <Space>
-              <EditButton hideText size="small" recordItemId={record.id} />
-              <DeleteButton hideText size="small" recordItemId={record.id} disabled={!(record.status === "draft" || record.status === "ordered")} />
+              <EditButton resource="app_purchase_orders" hideText size="small" recordItemId={record.order_id} />
+              <DeleteButton resource="app_purchase_orders" hideText size="small" recordItemId={record.order_id} disabled={!(record.status === "draft" || record.status === "ordered")} />
             </Space>
           )} />
         </Table>
