@@ -6,7 +6,7 @@ export default function BillbeeOrdersPage() {
   const [rows, setRows] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch("/api/billbee/orders/items?format=json")
+    fetch("/api/billbee/products/updatestock/route.ts")
       .then((res) => res.json())
       .then(setRows);
   }, []);

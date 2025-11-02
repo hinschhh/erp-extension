@@ -1,212 +1,286 @@
-// supabase/functions/billbee_inbound_worker/index.ts
 // deno-lint-ignore-file no-explicit-any
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-type OutboxRow = {
-  id: number;
-  topic: string;
-  payload: any;
-  status: string;
-  retry_count: number;
-};
-
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const BILLBEE_BASE = "https://api.billbee.io/api/v1";
+const SYNC_FN_URL = "https://nqdhcsebxybveezqfnyl.supabase.co/functions/v1/sync_reference_products";
 
-const BILLBEE_API_KEY = Deno.env.get("BILLBEE_API_KEY")!;
-const BILLBEE_USER = Deno.env.get("BILLBEE_USER")!;
-const BILLBEE_API_PASSWORD = Deno.env.get("BILLBEE_API_PASSWORD")!;
+// ---------- ENV HELPERS ----------
+function requiredEnv(name: string): string {
+  const v = Deno.env.get(name);
+  if (!v) throw new Error(`Missing env var ${name}`);
+  return v;
+}
 
-const sb = createClient(SUPABASE_URL, SERVICE_ROLE);
+const SUPABASE_URL = requiredEnv("SUPABASE_URL");                      // z.B. https://<ref>.supabase.co
+const SUPABASE_SERVICE_ROLE_KEY = requiredEnv("SUPABASE_SERVICE_ROLE_KEY"); // Service-Role Key (RLS-bypass, sicher im Edge-Env)
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// -------- Billbee API helpers ----------
-function billbeeHeaders() {
+function authHeaders() {
+  const apiKey = requiredEnv("BILLBEE_API_KEY");
+  const username = requiredEnv("BILLBEE_LOGIN");
+  const apiPassword = requiredEnv("BILLBEE_PASSWORD");
+  const basic = btoa(`${username}:${apiPassword}`);
   return {
-    "X-Billbee-Api-Key": BILLBEE_API_KEY,
-    Authorization: "Basic " + btoa(`${BILLBEE_USER}:${BILLBEE_API_PASSWORD}`),
     "Content-Type": "application/json",
+    "X-Billbee-Api-Key": apiKey,
+    "Authorization": `Basic ${basic}`,
+    "User-Agent": "supabase-edge-fn/stock-sync",
   };
 }
 
-async function billbeeGetProduct(id: number | string, lookupBy: "id" | "sku" | "ean" = "id") {
-  const url = `${BILLBEE_BASE}/products/${encodeURIComponent(String(id))}?lookupBy=${lookupBy}`;
-  const res = await fetch(url, { method: "GET", headers: billbeeHeaders() });
-  if (!res.ok) throw new Error(`Billbee GET product ${id} failed: ${res.status} ${await res.text()}`);
-  const data = await res.json();
-  // Bitte ggf. an echte Feldnamen anpassen:
-  // Hier erwarte ich ein Feld "StockCurrent" (oder ähnlich) im Response.
-  const current = data?.StockCurrent ?? data?.Stock ?? data?.Data?.Stock ?? 0;
-  return Number(current) || 0;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// ---------- HELFER: BILLBEE mit Rate-Limit ----------
+async function fetchBillbeeJsonWithRateLimit(
+  url: string,
+  init: RequestInit,
+  { maxRetries = 5, baseBackoffMs = 600, timeoutMs = 15000 } = {},
+) {
+  let attempt = 0;
+  while (true) {
+    attempt++;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...init, signal: ctrl.signal });
+      const text = await res.text();
+      let body: any;
+      try { body = JSON.parse(text); } catch { body = text; }
+
+      if (res.status !== 429) {
+        return { res, body };
+      }
+
+      const retryAfterHdr = res.headers.get("Retry-After");
+      const retryAfterSec = retryAfterHdr ? Number(retryAfterHdr) : NaN;
+      const jitter = Math.floor(Math.random() * 200);
+      const delayMs = Number.isFinite(retryAfterSec)
+        ? Math.max(0, Math.floor(retryAfterSec * 1000)) + jitter
+        : baseBackoffMs + jitter;
+
+      if (attempt > maxRetries) return { res, body }; // aufgeben
+      await sleep(delayMs);
+    } finally {
+      clearTimeout(t);
+    }
+  }
 }
 
-// Payload-Builder: bei Bedarf Feldnamen hier justieren!
-function buildUpdatePayloadSingle(productId: number, newStock: number) {
-  // Z. B. { ProductId, Amount } oder { ProductId, Stock }
-  return { ProductId: productId, Amount: newStock };
+async function postJsonWithTimeout(url: string, body: any, headers: Record<string, string>, timeoutMs = 10000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    const text = await res.text();
+    let json: any;
+    try { json = JSON.parse(text); } catch { json = text; }
+    return { ok: res.ok, status: res.status, body: json };
+  } finally {
+    clearTimeout(t);
+  }
 }
 
-function buildUpdatePayloadMultiple(items: Array<{ productId: number; newStock: number }>) {
-  // Z. B. { Products: [ { ProductId, Amount }, ... ] }
-  return { Products: items.map((i) => ({ ProductId: i.productId, Amount: i.newStock })) };
+// ---------- DOMAIN: Verarbeitung eines Outbox-Eintrags ----------
+type PayloadShape = {
+  id?: string | number;
+  amount?: number | string;
+  lookupBy?: "id" | "sku" | "ean";
+  reason?: string;
+  forceSendStockToShops?: boolean;
+  autosubtractReservedAmount?: boolean;
+};
+
+async function processOneOutboxRow(row: {
+  id: number;
+  payload: any;
+}) {
+  const p: PayloadShape = row.payload ?? {};
+
+  const id = (p.id ?? "").toString().trim();
+  const amount = Number(p.amount);
+  const lookupBy = (p.lookupBy ?? "id") as "id" | "sku" | "ean";
+  const reason = p.reason ?? "Stock increased via Supabase Outbox Worker";
+  const forceSendStockToShops = p.forceSendStockToShops ?? true;
+  const autosubtractReservedAmount = p.autosubtractReservedAmount ?? true;
+
+  if (!id) {
+    throw new Error(`Outbox#${row.id}: payload.id fehlt/leer`);
+  }
+  if (!Number.isFinite(amount)) {
+    throw new Error(`Outbox#${row.id}: payload.amount ist ungültig`);
+  }
+  if (!["id", "sku", "ean"].includes(lookupBy)) {
+    throw new Error(`Outbox#${row.id}: payload.lookupBy ist ungültig`);
+  }
+
+  // 1) Produkt + aktuellen Bestand holen
+  const getUrl = `${BILLBEE_BASE}/products/${encodeURIComponent(id)}?lookupBy=${lookupBy}`;
+  const { res: getRes, body: product } = await fetchBillbeeJsonWithRateLimit(getUrl, {
+    headers: authHeaders(),
+  });
+
+  if (!getRes.ok) {
+    throw new Error(`Billbee GET failed (${getRes.status}): ${JSON.stringify(product)}`);
+  }
+
+  const data = product?.Data;
+  if (!data) {
+    throw new Error("Billbee response missing Data");
+  }
+  const stock0 = Array.isArray(data.Stocks) && data.Stocks.length > 0 ? data.Stocks[0] : null;
+  if (!stock0) {
+    throw new Error("No Stocks[0] available on product");
+  }
+
+  const billbeeId = data.Id;
+  const sku = data.SKU;
+  const stockId = stock0.StockId;
+  const oldQty = Number(stock0.StockCurrent ?? data.StockCurrent ?? 0);
+  const newQty = oldQty + amount;
+
+  // 2) Update in Billbee
+  const updateUrl = `${BILLBEE_BASE}/products/updatestockmultiple`;
+  const models = [
+    {
+      ...(Number.isFinite(billbeeId) ? { BillbeeId: billbeeId } : {}),
+      ...(sku ? { Sku: sku } : {}),
+      ...(Number.isFinite(stockId) ? { StockId: stockId } : {}),
+      Reason: reason,
+      OldQuantity: oldQty,
+      NewQuantity: newQty,
+      DeltaQuantity: amount,
+      ForceSendStockToShops: forceSendStockToShops,
+      AutosubtractReservedAmount: autosubtractReservedAmount,
+    },
+  ];
+
+  const updRes = await fetch(updateUrl, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(models),
+  });
+  const updText = await updRes.text();
+  let updBody: any;
+  try { updBody = JSON.parse(updText); } catch { updBody = updText; }
+  if (!updRes.ok) {
+    throw new Error(`Billbee POST failed (${updRes.status}): ${JSON.stringify(updBody)}`);
+  }
+
+  // 3) Nach erfolgreichem POST → sync_reference_products
+  const syncPayload = {
+    source: "update_stock_multiple",
+    lookupBy,
+    product: { billbeeId, sku, stockId },
+    newQuantity: newQty,
+  };
+  const syncHeaders = { "Content-Type": "application/json" };
+  const syncResult = await postJsonWithTimeout(SYNC_FN_URL, syncPayload, syncHeaders, 10000);
+
+  return {
+    billbee: { billbeeId, sku, stockId },
+    oldQuantity: oldQty,
+    delta: amount,
+    newQuantity: newQty,
+    sync: { ok: syncResult.ok, status: syncResult.status },
+  };
 }
 
-async function billbeeUpdateStockSingle(productId: number, newStock: number) {
-  const url = `${BILLBEE_BASE}/products/updatestock`;
-  const body = buildUpdatePayloadSingle(productId, newStock);
-  const res = await fetch(url, { method: "POST", headers: billbeeHeaders(), body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`Billbee updatestock failed: ${res.status} ${await res.text()}`);
-}
-
-async function billbeeUpdateStockMultiple(items: Array<{ productId: number; newStock: number }>) {
-  const url = `${BILLBEE_BASE}/products/updatestockmultiple`;
-  const body = buildUpdatePayloadMultiple(items);
-  const res = await fetch(url, { method: "POST", headers: billbeeHeaders(), body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`Billbee updatestockmultiple failed: ${res.status} ${await res.text()}`);
-}
-
-// -------- Outbox processing ----------
-async function loadPending(limit = 100): Promise<OutboxRow[]> {
-  const { data, error } = await sb
+// ---------- Worker: pull & process ----------
+async function pullPending(limit = 50) {
+  // Nur pending + topic und bereits "verfügbar"
+  const { data, error } = await supabase
     .from("integration_outbox")
-    .select("*")
-    .eq("topic", "billbee.stock.inbound")
-    .in("status", ["pending", "error"])
+    .select("id, payload, retry_count")
+    .eq("status", "pending")
+    .eq("topic", "billbee.stock.increase")
     .lte("available_at", new Date().toISOString())
     .order("id", { ascending: true })
     .limit(limit);
+
   if (error) throw error;
   return data ?? [];
 }
 
-async function lockPending(id: number): Promise<OutboxRow | null> {
-  const { data, error } = await sb
+async function markSucceeded(id: number) {
+  await supabase
     .from("integration_outbox")
-    .update({ status: "processing" })
-    .eq("id", id)
-    .eq("status", "pending")
-    .select("*")
-    .single();
-  if (error && error.code !== "PGRST116") throw error;
-  return data ?? null;
+    .update({ status: "succeeded", error: null })
+    .eq("id", id);
 }
 
-async function done(id: number) {
-  await sb.from("integration_outbox").update({ status: "done", error: null }).eq("id", id);
+function addMinutes(date: Date, minutes: number) {
+  return new Date(date.getTime() + minutes * 60000);
 }
 
-async function fail(id: number, err: unknown) {
-  const msg = String(err);
-  const backoffMin = 5;
-  await sb
+async function markFailedWithBackoff(id: number, prevRetryCount: number, errMsg: string) {
+  const nextRetry = prevRetryCount + 1;
+  // simpler Backoff: 1, 2, 4, 8, 15 Minuten …
+  const minutes = Math.min(15, Math.pow(2, Math.max(0, nextRetry - 1)));
+  const nextAvailable = addMinutes(new Date(), minutes);
+
+  await supabase
     .from("integration_outbox")
     .update({
-      status: "error",
-      error: msg,
-      retry_count: sb.rpc ? undefined : undefined, // optional: eigene Zählung
-      available_at: new Date(Date.now() + backoffMin * 60_000).toISOString(),
+      status: "pending", // wir lassen pending + available_at in die Zukunft laufen
+      error: errMsg?.slice(0, 1000) ?? "Unknown",
+      retry_count: nextRetry,
+      available_at: nextAvailable.toISOString(),
     })
     .eq("id", id);
 }
 
-// Einzel-Event: GET current → new = current + delta → POST update
-async function processOutboxId(id: number) {
-  const { data: row, error } = await sb.from("integration_outbox").select("*").eq("id", id).maybeSingle<OutboxRow>();
-  if (error) throw error;
-  if (!row || row.status === "done") return;
-
-  const locked = await lockPending(id);
-  if (!locked) return; // schon in Arbeit/erledigt
-
-  const p = locked.payload || {};
-  const productId: number = Number(p.billbee_product_id);
-  const delta: number = Number(p.quantity_delta);
-
-  if (!Number.isFinite(productId) || !Number.isFinite(delta)) {
-    await fail(id, "Invalid payload (billbee_product_id or quantity_delta)");
-    return;
-  }
-
-  try {
-    const current = await billbeeGetProduct(productId, "id");
-    const next = current + delta;
-    await billbeeUpdateStockSingle(productId, next);
-    await done(id);
-  } catch (e) {
-    await fail(id, e);
-    throw e;
-  }
-}
-
-// Batch: gruppiert nach Produkt, summiert deltas, macht GET+POST (multi wenn sinnvoll)
-async function processSweep() {
-  const rows = await loadPending(200);
-  if (!rows.length) return;
-
-  // Lock einzeln, damit parallele Worker nicht doppelt verarbeiten
-  const toWork: OutboxRow[] = [];
-  for (const r of rows) {
-    const l = await lockPending(r.id);
-    if (l) toWork.push(l);
-  }
-  if (!toWork.length) return;
-
-  // Gruppieren: productId -> Gesamt-Delta & betroffene Row-IDs
-  const groups = new Map<number, { delta: number; rowIds: number[] }>();
-  for (const r of toWork) {
-    const pid = Number(r.payload?.billbee_product_id);
-    const d = Number(r.payload?.quantity_delta) || 0;
-    if (!Number.isFinite(pid) || d === 0) {
-      await done(r.id); // nichts zu tun
-      continue;
-    }
-    const g = groups.get(pid) ?? { delta: 0, rowIds: [] };
-    g.delta += d;
-    g.rowIds.push(r.id);
-    groups.set(pid, g);
-  }
-
-  // Für jedes Produkt: current holen, new = current + delta
-  const updates: Array<{ productId: number; newStock: number; rowIds: number[] }> = [];
-  for (const [pid, g] of groups) {
-    const current = await billbeeGetProduct(pid, "id");
-    updates.push({ productId: pid, newStock: current + g.delta, rowIds: g.rowIds });
-  }
-
-  try {
-    if (updates.length === 1) {
-      const u = updates[0];
-      await billbeeUpdateStockSingle(u.productId, u.newStock);
-      for (const id of u.rowIds) await done(id);
-    } else if (updates.length > 1) {
-      await billbeeUpdateStockMultiple(updates.map((u) => ({ productId: u.productId, newStock: u.newStock })));
-      for (const u of updates) for (const id of u.rowIds) await done(id);
-    }
-  } catch (e) {
-    for (const u of updates) for (const id of u.rowIds) await fail(id, e);
-    throw e;
-  }
-}
-
+// ---------- HTTP Handler ----------
 serve(async (req) => {
   try {
-    const body = await req.json().catch(() => ({}));
-    const outboxId = Number(body.outbox_id);
-    const sweep = Boolean(body.sweep);
+    if (req.method !== "POST") {
+      return new Response(JSON.stringify({ error: "Use POST" }), {
+        status: 405,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
-    if (Number.isFinite(outboxId)) {
-      await processOutboxId(outboxId);
-      return new Response("ok", { status: 200 });
+    // Batch aus der Outbox holen
+    const rows = await pullPending(50);
+
+    let processed = 0;
+    const results: any[] = [];
+
+    for (const row of rows) {
+      try {
+        const r = await processOneOutboxRow(row as any);
+        await markSucceeded(row.id);
+        results.push({ id: row.id, ok: true, ...r });
+        processed++;
+        // kleine Pause, um 2 req/s Caps pro Endpoint zu respektieren
+        await sleep(600);
+      } catch (err: any) {
+        const msg = err?.message ?? String(err);
+        await markFailedWithBackoff(row.id, (row as any).retry_count ?? 0, msg);
+        results.push({ id: row.id, ok: false, error: msg });
+        // zusätzliche kleine Pause bei Fehler
+        await sleep(800);
+      }
     }
-    if (sweep) {
-      await processSweep();
-      return new Response("sweep ok", { status: 200 });
-    }
-    // fallback: kleiner sweep
-    await processSweep();
-    return new Response("auto-sweep ok", { status: 200 });
-  } catch (e) {
-    return new Response(String(e), { status: 500 });
+
+    return new Response(JSON.stringify({
+      ok: true,
+      count: processed,
+      totalFetched: rows.length,
+      results,
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err?.message ?? "Unknown error" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 });

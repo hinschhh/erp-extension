@@ -11,6 +11,9 @@ type Product = Tables<"app_products">;
 type SelectProductProps = {
   value?: number | null;
   onChange?: (value: number | null) => void;
+  /**
+   * Statische Filter, die IMMER angewendet werden (z.B. supplier).
+   */
   filters?: Array<{
     field: string;
     operator:
@@ -29,31 +32,42 @@ export default function SelectProduct({ value, onChange, filters }: SelectProduc
   const { selectProps } = useSelect<Product>({
     resource: "app_products",
     optionLabel: "bb_sku",
-    optionValue: "id",                // id = number
+    optionValue: "id", // id ist number
     sorters: [{ field: "bb_sku", order: "asc" }],
-    filters,
-    // defaultValue hier weglassen -> wir steuern value selbst
+
+    // kleine Seiten -> schnelle Antwort; mehr Treffer durch Suche
+    pagination: { current: 1, pageSize: 1000 },
+
+    // Eingabe entprellen, um Requests zu sparen
+    debounce: 300,
+
+    // Falls du initial einen Wert hast, sicherstellen, dass dieser Wert geladen wird
+    defaultValueQueryOptions: {
+      enabled: true,
+    },
   });
 
-  // Optionen auf number casten – refine liefert DefaultOptionType
+  // refine liefert DefaultOptionType; wir casten value -> number
   const options = (selectProps.options ?? []) as Array<
     DefaultOptionType & { value: number }
   >;
 
-  const filterOption: SelectProps<number>["filterOption"] = (input, option) =>
-    String(option?.label ?? "").toLowerCase().includes(input.toLowerCase());
-
   return (
     <Select<number>
+      // serverseitige Suche aktivieren
+      showSearch
+      filterOption={false}
+      // refine stellt onSearch bereit – einfach durchreichen
+      onSearch={selectProps.onSearch}
+      // Optionen + Ladezustand aus useSelect
       options={options}
       loading={selectProps.loading}
+      virtual
+      allowClear
+      placeholder="Produkt wählen"
+      // controlled value
       value={value ?? undefined}
       onChange={(v) => onChange?.(v ?? null)}
-      allowClear
-      showSearch
-      placeholder="Produkt wählen"
-      filterOption={filterOption}
-      optionFilterProp="label"
     />
   );
 }

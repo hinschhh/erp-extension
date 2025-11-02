@@ -1,5 +1,6 @@
 //src/components/einkauf/bestellungen/positionen/modals/normal.tsx
 "use client";
+import { useInvalidate } from "@refinedev/core";
 import { useModalForm, useSelect } from "@refinedev/antd";
 import { Tables } from "@/types/supabase";
 import { Button, Flex, Form, Input, Modal, Select } from "antd";
@@ -11,10 +12,23 @@ type Produkte = Tables<"app_products">;
 
 export default function ButtonEinkaufBestellpositionenNormalHinzufuegen({orderId, supplier, status}: {orderId: string, supplier: string, status: string}) {
     const dataProvider = supabaseBrowserClient;
+    const invalidate = useInvalidate(); 
     const { formProps: createFormProps, modalProps: createModalProps, show: createModalShow } = useModalForm<PoItemNormal>({
         action: "create",
         resource: "app_purchase_orders_positions_normal",
         redirect: false,
+        onMutationSuccess: async () => {
+            await Promise.all([
+                invalidate({
+                resource: "app_purchase_orders_positions_normal_view", // <- VIEW!
+                invalidates: ["list", "many"],
+                }),
+                invalidate({
+                resource: "app_purchase_orders_positions_normal",
+                invalidates: ["list", "many"],
+                }),
+            ]);
+        },
     });
     const form = createFormProps.form!;
 

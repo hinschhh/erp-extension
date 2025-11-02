@@ -9,7 +9,7 @@ import {
   RefreshButton,
   ListButton,
 } from "@refinedev/antd";
-import { Button, Checkbox, Col, DatePicker, Form, Input, Row } from "antd";
+import { Button, Checkbox, Col, DatePicker, Form, Input, InputNumber, Row, message } from "antd";
 import dayjs from "dayjs";
 
 import { Tables } from "@/types/supabase";
@@ -20,6 +20,7 @@ import { parseNumber } from "@/utils/formats";
 import EinkaufBestellpositionenNormalBearbeiten from "@components/einkauf/bestellungen/positionen/normal";
 import EinkaufBestellpositionenSpecialBearbeiten from "@components/einkauf/bestellungen/positionen/special";
 import OrderStatusActionButton from "@components/common/buttons/po_order_confirm";
+import { useCallback, useEffect } from "react";
 
 type Po = Tables<"app_purchase_orders">;
 
@@ -28,17 +29,37 @@ export default function EinkaufsBestellungenBearbeiten() {
   const orderId = params?.id;
 
 
-  const { formProps: formPropsHeader, saveButtonProps } = useForm<Po>({
+  const { formProps: formPropsHeader, saveButtonProps, queryResult } = useForm<Po>({
     resource: "app_purchase_orders",
     id: orderId,
     meta: {
       select: "*, supplier_rel:app_suppliers!app_purchase_orders_supplier_fkey(id)",
     },
+    redirect: false,
   });
 
   const orderIdStr = orderId?.toString();
   const supplier = Form.useWatch("supplier", formPropsHeader.form);
-  const status = formPropsHeader.form?.getFieldValue("status");
+
+
+
+    // + NEU: Status direkt aus dem geladenen Datensatz
+  const record = queryResult?.data?.data;
+  const status = record?.status ?? "draft";
+  const costs = Number(record?.shipping_cost_net ?? 0);
+  const isLocked = Boolean(record?.separate_invoice_for_shipping_cost) || costs > 0;
+
+  // + NEU: Form-Werte aktualisieren, wenn record neu geladen wurde
+  useEffect(() => {
+    if (record) {
+      formPropsHeader.form?.setFieldsValue(record);
+    }
+  }, [record, formPropsHeader.form]);
+
+  const handleActionSuccess = useCallback(() => {
+  // refetch kann bei refine optional sein → doppelt absichern
+  queryResult?.refetch?.();
+}, [queryResult])
 
   return (
     <>
@@ -48,7 +69,7 @@ export default function EinkaufsBestellungenBearbeiten() {
         <>
           <ListButton hideText />
           <RefreshButton hideText />
-          <OrderStatusActionButton orderId={orderId}/>
+          <OrderStatusActionButton orderId={orderId} onSuccess={handleActionSuccess} />
         </> 
       }
       saveButtonProps={saveButtonProps} 
@@ -95,14 +116,27 @@ export default function EinkaufsBestellungenBearbeiten() {
               name="shipping_cost_net"
               normalize={parseNumber}
             >
-              <Input type="number" />
+              <InputNumber type="number" disabled={isLocked} addonAfter="€"/>
             </Form.Item>
 
             <Form.Item
               name="separate_invoice_for_shipping_cost"
               valuePropName="checked"
+              
+              
             >
-              <Checkbox>Versandkosten separat abrechnen?</Checkbox>
+              <Checkbox              
+                onChange={(e) => {
+                    if (costs > 0) {
+                    message.warning(
+                        "Nicht änderbar: Es sind bereits Versandkosten gebucht."
+                    );
+                    formPropsHeader.form?.setFieldValue(
+                        "separate_invoice_for_shipping_cost",
+                        record?.separate_invoice_for_shipping_cost ?? false
+                    );
+                    }
+                }}>Versandkosten separat abrechnen?</Checkbox>
             </Form.Item>
           </Col>
 

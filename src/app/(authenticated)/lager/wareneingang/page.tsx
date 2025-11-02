@@ -1,36 +1,59 @@
 "use client";
 
-import { List, useTable } from "@refinedev/antd";
+import { List, useTable,CreateButton, EditButton, DeleteButton } from "@refinedev/antd";
 import { Table, Card, Space } from "antd";
-import {Tables, TablesInsert, TablesUpdate} from "@/types/supabase";
+import {Tables } from "@/types/supabase";
+import { ISStatusTag } from "@components/common/tags/states/is";
 
-type InboundShipmentRow = Tables<"app_inbound_shipments">;
-type InboundShipmentCreate = TablesInsert<"app_inbound_shipments">;
-type InboundShipmentUpdate = TablesUpdate<"app_inbound_shipments">;
+type InboundShipment = Tables<"app_inbound_shipments">;
 
 export default function InboundShipmentsListPage() {
-const {tableProps} = useTable<InboundShipmentRow>({
+const {tableProps} = useTable<InboundShipment>({
   resource: "app_inbound_shipments",
+  sorters: { initial: [{ field: "created_at", order: "desc" }], mode: "server"  },
+  filters: { initial: [], mode: "server" },
+  pagination: { pageSize: 20 },
+  syncWithLocation: true,
 });
 
-const columns = [ 
-  { title: "Eingang am", dataIndex: "arrived_at" },
-  { title: "Lieferschein", dataIndex: "shipment_no" },
-  { title: "Carrier", dataIndex: "carrier" },
-  { title: "Tracking", dataIndex: "tracking_no" },
-  { title: "Notiz", dataIndex: "note" },
-];
-
 return (
-<>
 
-<List>
-  <Card title="Wareneingänge">
-    <Space>Hier können Wareneingänge verwaltet werden.</Space>
-  </Card>
-  <Table {...tableProps} rowKey="id" columns={columns} />
+
+<List
+  title="Wareneingänge"
+  headerButtons={
+    <CreateButton hideText/>
+  }
+>
+  <Table {...tableProps} rowKey="id">
+    <Table.Column title="Wareneingangsnummer" dataIndex="inbound_number" sorter />
+    <Table.Column title="Status" dataIndex="status" sorter 
+    render={(_, record) => (
+      <ISStatusTag status={record.status} />
+    )}
+    />
+    <Table.Column title="Lieferscheinnummer" dataIndex="delivery_note_no" sorter />
+    <Table.Column title="Lieferant" dataIndex="fk_bb_supplier" sorter />
+    <Table.Column title="Notiz" dataIndex="notes" sorter />
+    <Table.Column title="Aktionen" key="actions" render={(_, record) => (
+      <Space>
+        <EditButton hideText size="small" recordItemId={record.id} />
+        <DeleteButton
+          hideText
+          size="small"
+          recordItemId={record.id}
+          mutationMode="pessimistic"          // sofort löschen (kein Undo)
+          confirmTitle="Position wirklich löschen?"
+          confirmOkText="Löschen"
+          confirmCancelText="Abbrechen"
+          onError={(err) => console.error("Delete error:", err)}
+          disabled={(record.status === "posted")}
+        />
+      </Space>
+    )} />
+  </Table>
 </List>
-</>
+
 );
 };
 

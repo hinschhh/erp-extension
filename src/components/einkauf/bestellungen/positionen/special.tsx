@@ -12,7 +12,7 @@ import { PoItemStatus } from "@/types/status";
 import ButtonEinkaufBestellpositionenSpezialHinzufuegen from "./modals/special";
 import SketchConfirmButton from "@components/common/buttons/confirmSketchButton";
 
- type PoItemSpecial = Tables<"app_purchase_orders_positions_special">;
+ type PoItemSpecial = Omit<Tables<"app_purchase_orders_positions_special_view">, "id"> & { id: string };
  type Produkte = Tables<"app_products">;
 
 export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supplier, status}: {orderId: string, supplier: string, status: string}) {
@@ -161,7 +161,12 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                         </Form.Item>
                         );
                     }
-                    return <NumberField value={value} />;
+                    return <>
+                        <NumberField value={value} />
+                        <div style={{ fontSize: "0.75rem", color: "#888" }}>
+                            geliefert: {record.qty_received ?? 0}
+                        </div>
+                    </>;
                 }}
             />
             <Table.Column title="Preis" dataIndex="unit_price_net"              width={150}

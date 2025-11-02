@@ -19,8 +19,8 @@
  import ButtonEinkaufBestellpositionenNormalHinzufuegen from "@components/einkauf/bestellungen/positionen/modals/normal";
  
  import { formatCurrencyEUR, parseNumber } from "@/utils/formats";
- 
- type PoItemNormal = Tables<"app_purchase_orders_positions_normal">;
+
+ type PoItemNormal = Omit<Tables<"app_purchase_orders_positions_normal_view">, "id"> & { id: string };
  type Produkte = Tables<"app_products">;
 
  export default function EinkaufBestellpositionenNormalBearbeiten({orderId, supplier, status}: {orderId: string, supplier: string, status: string}) {
@@ -33,7 +33,7 @@
     editButtonProps: editButtonPropsEditableTableNormal,
     tableProps: editableTablePropsNormal,
   } = useEditableTable<PoItemNormal>({
-    resource: "app_purchase_orders_positions_normal",
+    resource: "app_purchase_orders_positions_normal_view",
     filters: {
       permanent: orderId ? [{ field: "order_id", operator: "eq", value: orderId }] : [],
     },
@@ -64,6 +64,7 @@
     </div>
 <Form
           title="Bestellpositionen - Normale Artikel"
+          resource="app_purchase_orders_positions_normal"
           id="form-po-items-normal"
           {...formPropsEditableTableNormal}
         >
@@ -110,7 +111,7 @@
               title="Status"
               width={150}
               render={(_, record: PoItemNormal) => {
-                if (isEditingEditableTableNormal(record.id)) {
+                if (isEditingEditableTableNormal(record.id as string)) {
                   return (
                     <Form.Item
                       name="po_item_status"
@@ -130,7 +131,7 @@
               dataIndex="dol_planned_at"
               width={150}
               render={(value, record: PoItemNormal) => {
-                if (isEditingEditableTableNormal(record.id)) {
+                if (isEditingEditableTableNormal(record.id as string)) {
                   return (
                     <Form.Item
                       name="dol_planned_at"
@@ -165,7 +166,7 @@
               dataIndex="qty_ordered"
               width={120}
               render={(value, record: PoItemNormal) => {
-                if (isEditingEditableTableNormal(record.id)) {
+                if (isEditingEditableTableNormal(record.id as string)) {
                   return (
                     <Form.Item
                       name="qty_ordered"
@@ -176,7 +177,12 @@
                     </Form.Item>
                   );
                 }
-                return <NumberField value={value} />;
+                return <>
+                    <NumberField value={value} />
+                    <div style={{ fontSize: "0.75rem", color: "#888" }}>
+                        geliefert: {record.qty_received ?? 0}
+                    </div>
+                </>;
               }}
             />
 
@@ -186,7 +192,7 @@
               dataIndex="unit_price_net"
               width={150}
               render={(value: number, record: PoItemNormal) => {
-                if (isEditingEditableTableNormal(record.id)) {
+                if (isEditingEditableTableNormal(record.id as string)) {
                   return (
                     <Form.Item
                       name="unit_price_net"
@@ -239,7 +245,7 @@
               fixed="right"
               width={400}
               render={(value: string | null | undefined, record: PoItemNormal) => {
-                if (isEditingEditableTableNormal(record.id)) {
+                if (isEditingEditableTableNormal(record.id as string)) {
                   return (
                     <Form.Item
                       name="internal_notes"
@@ -260,7 +266,7 @@
               fixed="right"
               width={90}
               render={(_, record: PoItemNormal) => {
-                if (isEditingEditableTableNormal(record.id)) {
+                if (isEditingEditableTableNormal(record.id as string)) {
                   return (
                     <Space>
                       <SaveButton
@@ -277,7 +283,7 @@
                 return (
                     <Space>
                     <EditButton
-                        {...editButtonPropsEditableTableNormal(record.id)}
+                        {...editButtonPropsEditableTableNormal(record.id as string)}
                         hideText
                         size="small"
                     />
@@ -285,7 +291,7 @@
                         hideText
                         size="small"
                         resource="app_purchase_orders_positions_normal"
-                        recordItemId={record.id}
+                        recordItemId={record.id as string}
                         mutationMode="pessimistic"          // sofort löschen (kein Undo)
                         confirmTitle="Position wirklich löschen?"
                         confirmOkText="Löschen"

@@ -1,7 +1,7 @@
 //src/components/einkauf/bestellungen/positionen/modals/special.tsx
 
 "use client";
-
+import { useInvalidate } from "@refinedev/core";
 import { useModalForm, useSelect } from "@refinedev/antd";
 import { Tables } from "@/types/supabase";
 import { Button, Checkbox, Col, Flex, Form, Input, Modal, Row, Select, Space } from "antd";
@@ -17,11 +17,23 @@ type AutoValues = {
 };
 
 export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderId, supplier, status}: {orderId: string, supplier: string, status: string}) {
-
+    const invalidate = useInvalidate();
     const { formProps: createFormProps, modalProps: createModalProps, show: createModalShow } = useModalForm<PoItemSpecial>({
         action: "create",
         resource: "app_purchase_orders_positions_special",
         redirect: false,
+        onMutationSuccess: async () => {
+            await Promise.all([
+                invalidate({
+                resource: "app_purchase_orders_positions_special_view", // <- VIEW!
+                invalidates: ["list", "many"],
+                }),
+                invalidate({
+                resource: "app_purchase_orders_positions_special",
+                invalidates: ["list", "many"],
+                }),
+            ]);
+        },
     });
 
     const form = createFormProps.form!;

@@ -10,9 +10,9 @@ import { supabaseBrowserClient } from "@utils/supabase/client";
 
 type Po = Tables<"app_purchase_orders">;
 
-type Props = { orderId: string };
+type Props = { orderId: string ; onSuccess?: () => void };
 
-export default function OrderStatusActionButton({ orderId }: Props) {
+export default function OrderStatusActionButton({ orderId, onSuccess }: Props) {
   const supabase = supabaseBrowserClient;
   const invalidate = useInvalidate();
 
@@ -27,7 +27,7 @@ export default function OrderStatusActionButton({ orderId }: Props) {
   const status = data?.data?.status;
   const confirmedAt = data?.data?.proforma_confirmed_at;
 
-  const runAction = async (nextStatus: "ordered" | "confirmed") => {
+    const runAction = async (nextStatus: "ordered" | "confirmed") => {
     try {
       setSubmitting(true);
       const { error } = await supabase.rpc("rpc_po_items_set_status_for_order", {
@@ -40,15 +40,14 @@ export default function OrderStatusActionButton({ orderId }: Props) {
         return;
       }
 
-      // 1) Lokale Rückmeldung
       message.success(
         nextStatus === "ordered" ? "Bestellung übermittelt." : "Bestellung bestätigt."
       );
 
-      // 2) Daten neu laden (Detail-View)
+      // Lokales Re-Read für den Button
       await refetch();
 
-      // 3) Caches invalidieren (Listen/Verknüpfte Ressourcen)
+      // Cache-Invalidation
       await Promise.all([
         invalidate({
           resource: "app_purchase_orders",
@@ -58,13 +57,13 @@ export default function OrderStatusActionButton({ orderId }: Props) {
         invalidate({
           resource: "app_purchase_orders_positions_normal",
           invalidates: ["list", "many"],
-          // optional: wenn du nach order_id filterst, kannst du hier meta/filters mitschicken
         }),
         invalidate({
           resource: "app_purchase_orders_positions_special",
           invalidates: ["list", "many"],
         }),
       ]);
+      onSuccess?.();
     } finally {
       setSubmitting(false);
     }
