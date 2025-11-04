@@ -38,6 +38,7 @@ export default function SelectPOOrderModal({ inboundShipmentId, inboundShipmentS
     sorters: [{ field: "ordered_at", order: "desc" }],
     filters: [
       {
+
         field: "ordered_at",
         operator: "nnull",
         value: null,
@@ -207,7 +208,9 @@ router.refresh();
       >
         <Form {...formProps} form={form} layout="vertical" initialValues={{ selected_normal_ids: [] }}>
           <Form.Item name="order_id" label="Bestellung auswählen" required>
-            <Select {...selectPropsPO} placeholder="Bestellung auswählen" />
+            <Select {...selectPropsPO} placeholder="Bestellung auswählen" filterOption={(input, option) => {
+              return typeof option?.label === "string" && option.label.toLowerCase().includes(input.toLowerCase());
+            }} />
           </Form.Item>
           <Form.Item>
             <h4>Normale Positionen der Bestellung</h4>
