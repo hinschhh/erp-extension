@@ -49,7 +49,7 @@ export default function ArtikelListPage() {
     optionValue: "bb_sku",
     pagination: { pageSize: 200 },
     sorters: [{ field: "bb_sku", order: "asc" }],
-    filters: [{ field: "bb_sku", operator: "ne", value: null }],
+    filters: [{ field: "bb_sku", operator: "ne", value: null }, { field: "inventory_cagtegory", operator: "ne", value: "Kein Inventar" }],
     meta: { select: "bb_sku" },
   });
   const skuOptions = useMemo(

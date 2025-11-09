@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowserClient } from "@/utils/supabase/client";
 import { parseNumber } from "@utils/formats";
 import { ISStatusTag } from "@components/common/tags/states/is";
+import TextArea from "antd/es/input/TextArea";
 
 type InboundItems = Tables<"app_inbound_shipment_items">;
 
@@ -27,7 +28,7 @@ export default function InboundItems({ inboundShipmentId, inboundShipmentStatus 
     resource: "app_inbound_shipment_items",
     meta: {
       // wir brauchen po_item_normal_id & order_id für das Nachladen der offenen Menge
-      select: "id, shipment_id, order_id, po_item_normal_id, quantity_delivered, item_status, app_purchase_orders_positions_normal(app_products(bb_sku, supplier_sku)), app_purchase_orders(order_number, invoice_number), app_purchase_orders_positions_special(supplier_sku)",
+      select: "id, shipment_id, order_id, po_item_normal_id, quantity_delivered, item_status, app_purchase_orders_positions_normal(app_products(bb_sku, supplier_sku), internal_notes), app_purchase_orders(order_number, invoice_number), app_purchase_orders_positions_special(supplier_sku, internal_notes, order_confirmation_ref)",
     },
     filters: {
       permanent: [
@@ -38,7 +39,9 @@ export default function InboundItems({ inboundShipmentId, inboundShipmentStatus 
         },
       ],
     },
-    sorters: {},
+    sorters: {
+      mode: "server",
+    },
   });
 
   const form = formProps.form!;
@@ -119,14 +122,9 @@ export default function InboundItems({ inboundShipmentId, inboundShipmentStatus 
             },
           })}
         >
-          <Table.Column title="Bestellung" dataIndex="order_id" render={(_, record) => {
-            return (
-              <span>
-                {record.app_purchase_orders?.order_number} - {record.app_purchase_orders?.invoice_no}
-              </span>
-            );
-          }} 
-          />
+          <Table.Column title="Bestellung" dataIndex={["app_purchase_orders", "order_number"]} sorter />
+          <Table.Column title="Rechnung" dataIndex={["app_purchase_orders","invoice_number"]} sorter />
+          <Table.Column title="AB-Ref" dataIndex={["app_purchase_orders_positions_special", "order_confirmation_ref"]} sorter />
           <Table.Column title="Normal/Sonder" dataIndex="po_item_normal_id" sorter render={(_, record) => {
             if (record.po_item_normal_id) {
               return <Tag color="default">Normal</Tag>;
@@ -190,6 +188,17 @@ export default function InboundItems({ inboundShipmentId, inboundShipmentStatus 
                 );
               }
               return <NumberField value={value} />;
+            }}
+          />
+          <Table.Column 
+            title="Anmerkungen"
+            dataIndex="internal_notes"
+            render={(_, record) => {
+                const notes =
+                record.app_purchase_orders_positions_normal?.internal_notes ??
+                record.app_purchase_orders_positions_special?.internal_notes ??
+                "";
+              return <div>{notes}</div>;
             }}
           />
           <Table.Column

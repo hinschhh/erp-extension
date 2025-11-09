@@ -1,7 +1,7 @@
 "use client";
 
 import { List, useTable, EditButton, DeleteButton, useSelect, CreateButton } from "@refinedev/antd";  // oder Create, Edit, Show
-import { Table, Space } from "antd";
+import { Table, Space, Input } from "antd";
 import { Tables } from "@/types/supabase";
 import { PoStatusTag, statusMap } from "@/components/common/tags/states/po";
 import { ColumnFilterOption, ColumnMultiSelectFilter } from "@components/common/table/ColumnMultiSelectFilter";
@@ -13,7 +13,7 @@ type Supplier = Tables<"app_suppliers">;
 export default function EinkaufsBestellungenÜbersicht() {
 
 
-  const { tableProps, sorters, filters } = useTable<Po>({
+  const { tableProps, sorters, filters, setFilters } = useTable<Po>({
     resource: "app_purchase_orders_view",
     meta: { select: "*" },
     sorters: { initial: [{ field: "created_at", order: "desc" }], mode: "server" },
@@ -33,11 +33,38 @@ export default function EinkaufsBestellungenÜbersicht() {
     label, 
     value, 
   }));
+  
+
+  const handleSearch = (value: string) => {
+    const otherFilters = (filters ?? []).filter((f) => 'field' in f && f.field !== "search_blob");
+
+    if (!value) {
+      // Suche leer → Filter entfernen
+      setFilters(otherFilters, "replace");
+      return;
+    }
+    
+    // Filter auf search_blob setzen (ILIKE '%value%')
+    setFilters(
+      [
+        ...otherFilters,
+        {
+          field: "search_blob",
+          operator: "contains",
+          value,
+        } as const,
+      ],
+      "replace"
+    );
+  };
 
   return (
     <List title="Einkauf - Bestellungen"
       headerButtons={
-        <CreateButton hideText/>
+        <>
+          <Input.Search placeholder="Suchen…" style={{ width: 200 }} enterButton onSearch={handleSearch}/>
+          <CreateButton hideText/>
+        </>
       }
     >
         <Table rowKey="id" {...tableProps} >

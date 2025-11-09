@@ -1,6 +1,6 @@
 "use client";
 
-import { useInvalidate } from "@refinedev/core";
+import { useInvalidate, useOne } from "@refinedev/core";
 import { useRouter } from "next/navigation";
 import { FolderOpenOutlined } from "@ant-design/icons";
 import { Button, Form, Select, Table, message } from "antd";
@@ -19,6 +19,12 @@ export default function SelectPOOrderModal({ inboundShipmentId, inboundShipmentS
 
   const invalidate = useInvalidate();
   const router = useRouter();
+
+  const {data, isLoading, refetch} = useOne({
+    resource: "app_inbound_shipments",
+    id: inboundShipmentId,
+    meta: { select: "id,status" },
+  });
 
   const { formProps, modalProps, show, form } = useModalForm({
     action: "create",
@@ -44,6 +50,12 @@ export default function SelectPOOrderModal({ inboundShipmentId, inboundShipmentS
         value: null,
       },
     ],
+    onSearch: (value) => [
+    { field: "order_number", operator: "contains", value: `%${value}%` },
+    { field: "supplier", operator: "contains", value: `%${value}%` },
+    { field: "invoice_number", operator: "contains", value: `%${value}%` },
+  ],
+  meta: { or: true },
   });
 
   const orderId: string | null = Form.useWatch("order_id", form);
@@ -191,9 +203,16 @@ router.refresh();
 
   return (
     <>
-      <Button onClick={() => show()} icon={<FolderOpenOutlined />}>
-        Bestellung wählen
-      </Button>
+      {data?.data?.status !== "posted" && (
+        <Button onClick={() => show()} icon={<FolderOpenOutlined />}>
+          Bestellung wählen
+        </Button>
+      )}
+      {data?.data?.status === "posted" && (
+        <Button onClick={() => show()} icon={<FolderOpenOutlined />} disabled>
+          Bestellung wählen
+        </Button>
+      )}
       <Modal
         {...modalProps}
         title="Gelieferte Positionen auswählen"
@@ -248,6 +267,7 @@ router.refresh();
               <Table.Column title="SKU" dataIndex={["special_product", "bb_sku"]} render={(value, record) => {
                 return (
                 <span>
+                    <strong>{`${record.supplier_sku ?? "—"} - `}</strong>
                     <strong>{record.internal_notes ? `${record.internal_notes}` : ""}</strong>
                     {record.order_confirmation_ref ? ` (${record.order_confirmation_ref}) – ` : ""}
                     <strong>{`${record.base_model?.bb_sku ?? "—"}`}</strong>

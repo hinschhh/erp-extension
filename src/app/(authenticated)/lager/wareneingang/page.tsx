@@ -1,6 +1,6 @@
 "use client";
 
-import { List, useTable,CreateButton, EditButton, DeleteButton } from "@refinedev/antd";
+import { List, useTable,CreateButton, EditButton, DeleteButton, DateField } from "@refinedev/antd";
 import { Table, Card, Space } from "antd";
 import {Tables } from "@/types/supabase";
 import { ISStatusTag } from "@components/common/tags/states/is";
@@ -31,6 +31,14 @@ return (
     render={(_, record) => (
       <ISStatusTag status={record.status} />
     )}
+    />
+    <Table.Column
+      title="Lieferdatum"
+      dataIndex="arrived_at"
+      sorter
+      render={(_, record: InboundShipment) => (
+        <DateField value={record.arrived_at} format="DD.MM.YYYY" />
+      )}
     />
     <Table.Column title="Lieferscheinnummer" dataIndex="delivery_note_no" sorter />
     <Table.Column title="Lieferant" dataIndex="fk_bb_supplier" sorter />

@@ -3,8 +3,10 @@ import {
   ShoppingCartOutlined,
   TagsOutlined,
   ShopOutlined,
-  GoldOutlined
+  GoldOutlined,
+  PhoneOutlined
 } from "@ant-design/icons";
+import { Agent } from "http";
 
 /**
  * Leitlinien:
@@ -18,6 +20,21 @@ import {
  * - Inkonsistente/leer definierte Ressourcen
  */
 const resources: IResourceItem[] = [
+  // --- Sektion: Kundenberatung (nur Navigation/Gruppe)
+  {
+    name: "kundenberatung",
+    list: "/kundenberatung",
+    icon: <PhoneOutlined />,
+    options: { label: "Kundenberatung" },
+  },
+  // Reklamationen (DB: app_complaints)
+  {
+    name: "app_complaints",
+    list: "/kundenberatung/reklamationen",
+    parentName: "kundenberatung",
+    options: { label: "Reklamationen" },
+  },
+
   // ── Sektion: Einkauf (nur Navigation/Gruppe)
   {
     name: "einkauf",

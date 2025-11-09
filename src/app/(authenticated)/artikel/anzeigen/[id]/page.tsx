@@ -151,7 +151,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
     refetch,
   } = useList<InvRow>({
     resource: "rpt_products_inventory_purchasing",
-    filters: [{ field: "billbee_product_id", operator: "eq", value: idNum }],
+    filters: [{ field: "product_id", operator: "eq", value: idNum }],
     pagination: { mode: "off" },
     meta: { select: "*" },
   });

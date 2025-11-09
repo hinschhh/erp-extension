@@ -28,7 +28,6 @@ export default function EinkaufsBestellungenBearbeiten() {
   const params = useParams() as { id: string };
   const orderId = params?.id;
 
-
   const { formProps: formPropsHeader, saveButtonProps, queryResult } = useForm<Po>({
     resource: "app_purchase_orders",
     id: orderId,
