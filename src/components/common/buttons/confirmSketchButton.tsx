@@ -54,7 +54,7 @@ export default function SketchConfirmButton({ itemId, onDone }: Props) {
 
       const { error } = await supabase.rpc("rpc_po_special_confirm_sketch", {
         p_item_id: itemId,
-      });
+      } as any);
 
       if (error) {
         message.error(error.message || "Aktion fehlgeschlagen");

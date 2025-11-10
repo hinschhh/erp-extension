@@ -99,7 +99,7 @@ export default function OrderStatusActionButton({ orderId, onSuccess }: Props) {
 
     const { data, error } = await supabase.rpc(
       "rpc_po_items_set_status_for_order",
-      payload
+      payload as any
     );
 
     console.log("RPC result", { data, error });

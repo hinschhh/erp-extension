@@ -42,7 +42,7 @@ export default function InboundPostAndDispatchButton({
     try {
       const { data, error } = await supabase.rpc("fn_is_post_and_dispatch", {
         p_inbound_id: inboundShipmentId,
-      });
+      } as any);
 
       if (error) throw error;
 

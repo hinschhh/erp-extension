@@ -15,6 +15,13 @@ import SyncStockSingleProductButton from "@/components/artikel/SyncStockSinglePr
 /* ---------- Typen ---------- */
 type AppProduct = Tables<"app_products">;
 
+type PurchaseOrderLite = {
+  id: string;
+  order_number?: string | null;
+  supplier: string | null;
+};
+
+
 type InvRow = {
   billbee_product_id: number;
   sku: string | null;
@@ -310,27 +317,43 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
           return;
         }
 
-        // 2) Bestellungen & Lieferanten auflösen
-        const { data: poList } = await supabase
-          .from("app_purchase_orders")
-          .select("id, order_number, supplier")
-          .in("id", orderIds);
+        // 2) Bestellungen laden
+          const { data: poListRaw, error: poError } = await supabase
+            .from("app_purchase_orders")
+            .select("id, order_number, supplier")
+            .in("id", orderIds);
 
-        const supplierIds = Array.from(new Set((poList ?? []).map((p) => (p as any).supplier_id)));
+          if (poError) {
+            throw poError;
+          }
 
-        const poMap = new Map<string, { order_number: string; supplier_name: string }>();
-        (poList ?? []).forEach((p) =>
-          poMap.set(p.id as string, {
-            order_number: (p as any).order_number ?? "—",
-            supplier_name: ((p as any).supplierIds as string) ?? "—",
-          }),
-        );
+          // TS-sicheres Array
+          const poList = (poListRaw ?? []) as PurchaseOrderLite[];
+
+          // 3) Lieferanten-IDs sammeln (unique)
+          const supplierIds = Array.from(
+            new Set(
+              poList
+                .map((p) => p.supplier)
+                .filter((id): id is string => !!id) // null/undefined rausfiltern
+            )
+          );
+
+          // 4) Map von PO-ID → Bestellnummer + Lieferanten-ID (Name kommt später aus Supplier-Map)
+          const poMap = new Map<string, { order_number: string; supplier: string | null }>();
+
+          poList.forEach((p) => {
+            poMap.set(p.id, {
+              order_number: p.order_number ?? "—",
+              supplier: p.supplier,
+            });
+          });
 
         const rows: PoItemRow[] = combined.map((c) => ({
           id: c.id,
           order_id: c.order_id,
           order_number: poMap.get(c.order_id)?.order_number ?? "—",
-          supplier_name: poMap.get(c.order_id)?.supplier_name ?? "—",
+          supplier_name: poMap.get(c.order_id)?.supplier ?? "—",
           internal_sku: sku ?? "—",
           qty: c.qty,
           unit_price_net: c.unit_price_net,
