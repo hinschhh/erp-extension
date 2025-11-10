@@ -23,12 +23,24 @@ import {
 } from "antd";
 import { ExclamationCircleFilled } from "@ant-design/icons";
 import { useShow, useList, useNotification } from "@refinedev/core";
-import type { Tables } from "@/types/supabase";
+import type { Database, Tables } from "@/types/supabase";
 import type { HttpError } from "@refinedev/core";
 import { supabaseBrowserClient } from "@/utils/supabase/client";
+import { Data } from "@dnd-kit/core";
+import App from "next/app";
 
 /* ---------- Typen ---------- */
 type AppProduct = Tables<"app_products">;
+type AppProductsUpdate = Database["public"]["Tables"]["app_products"]["Update"];
+
+type DebugAppProductsUpdate = AppProductsUpdate;
+
+
+type PurchaseOrderLite = {
+  id: string;
+  order_number?: string | null;
+  supplier: string | null;
+};
 
 type PoItemRow = {
   id: string;
@@ -261,13 +273,14 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
     if (!hasNumericId) return;
     setSaving(true);
     try {
-      const { error } = await supabaseBrowserClient
+        const { error } = await (supabaseBrowserClient as any)
         .from("app_products")
         .update({
           supplier_sku: values.supplier_sku ?? null,
           purchase_details: values.purchase_details ?? null,
         })
         .eq("id", idNum);
+
 
       if (error) throw error;
 
@@ -352,27 +365,43 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
           return;
         }
 
-        // 2) Bestellung + Lieferant auflösen
-        const { data: poList } = await supabase
-          .from("app_purchase_orders")
-          .select("id, order_number, supplier")
-          .in("id", orderIds);
+        // 2) Bestellungen laden
+          const { data: poListRaw, error: poError } = await supabase
+            .from("app_purchase_orders")
+            .select("id, order_number, supplier")
+            .in("id", orderIds);
 
-        const supplierIds = Array.from(new Set((poList ?? []).map((p) => p.id)));
+          if (poError) {
+            throw poError;
+          }
 
-        const poMap = new Map<string, { order_number: string; supplier_name: string }>();
-        (poList ?? []).forEach((p) =>
-          poMap.set(p.id as string, {
-            order_number: (p as any).order_number ?? "—",
-            supplier_name: ((p as any).supplierIds as string) ?? "—",
-          }),
-        );
+          // TS-sicheres Array
+          const poList = (poListRaw ?? []) as PurchaseOrderLite[];
+
+          // 3) Lieferanten-IDs sammeln (unique)
+          const supplierIds = Array.from(
+            new Set(
+              poList
+                .map((p) => p.supplier)
+                .filter((id): id is string => !!id) // null/undefined rausfiltern
+            )
+          );
+
+          // 4) Map von PO-ID → Bestellnummer + Lieferanten-ID (Name kommt später aus Supplier-Map)
+          const poMap = new Map<string, { order_number: string; supplier: string | null }>();
+
+          poList.forEach((p) => {
+            poMap.set(p.id, {
+              order_number: p.order_number ?? "—",
+              supplier: p.supplier,
+            });
+          });
 
         const rows: PoItemRow[] = combined.map((c) => ({
           id: c.id,
           order_id: c.order_id,
           order_number: poMap.get(c.order_id)?.order_number ?? "—",
-          supplier_name: poMap.get(c.order_id)?.supplier_name ?? "—",
+          supplier_name: poMap.get(c.order_id)?.supplier ?? "—",
           internal_sku: sku ?? "—",
           qty: c.qty,
           unit_price_net: c.unit_price_net,

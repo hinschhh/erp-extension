@@ -74,12 +74,16 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
     });
 
 
-    const ausGrundmodellKopieren = async () => {
+    {/*const ausGrundmodellKopieren = async () => {
         const { data, error } = await dataProvider
             .from("app_products")
             .select("supplier_sku, bb_net_purchase_price, purchase_details")
             .eq("id", form.getFieldValue("base_model_billbee_product_id"))
-            .single();
+            .single<{
+                supplier_sku: string | null;
+                bb_net_purchase_price: number | null;
+                purchase_details: string | null;
+            }>();
 
         if (error) {
             console.error("Error fetching product:", error);
@@ -92,7 +96,7 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
             unit_price_net: product?.bb_net_purchase_price ?? 0,
             details_override: product?.purchase_details ?? "",
         });
-    };
+    };*/}
 
     return (
         <>
@@ -115,7 +119,7 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
                                 >
                                     <Select {...selectPropsBaseModel} style={{ minWidth: 220 }} />
                                 </Form.Item>
-                                <Button onClick={ausGrundmodellKopieren}>Aus Grundmodell kopieren</Button>
+                                <Button /*onClick={ausGrundmodellKopieren}*/ >Aus Grundmodell kopieren</Button>
                             </Flex>
                         </Form.Item>
                     </Col>

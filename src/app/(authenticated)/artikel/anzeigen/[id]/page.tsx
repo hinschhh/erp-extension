@@ -197,7 +197,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
   }, [bomListRes?.data]);
 
   const components =
-    (compRes?.data as AppProduct[] | undefined)?.map((c) => ({
+    (compRes?.data as AppProduct[] | undefined)?.flat()?.map((c) => ({
       ...c,
       qty: qtyByComponentId.get(Number(c.id)) ?? 1,
     })) ?? [];
@@ -241,7 +241,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
   });
 
   const usedIn =
-    (parentRes?.data as AppProduct[] | undefined)?.map((b) => ({
+    (parentRes?.data?.flat() as AppProduct[] | undefined)?.map((b) => ({
       ...b,
       qty: qtyByParentId.get(Number(b.id)) ?? 1,
     })) ?? [];

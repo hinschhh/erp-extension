@@ -76,7 +76,7 @@ export default function InboundItems({ inboundShipmentId, inboundShipmentStatus 
       }
 
       const map: Record<string, number> = {};
-      for (const r of data ?? []) {
+      for (const r of (data ?? []) as { id: string; qty_open: number }[]) {
         map[String(r.id)] = Number(r.qty_open ?? 0);
       }
       setQtyOpenByPoItem(map);

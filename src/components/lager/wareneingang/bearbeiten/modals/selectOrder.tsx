@@ -173,13 +173,13 @@ export default function SelectPOOrderModal({ inboundShipmentId, inboundShipmentS
     const payloadNormal = rowsNormal.filter((r) => r.quantity_delivered > 0);
     const payloadSpecial = rowsSpecial.filter((r) => r.quantity_delivered > 0);
 
-    const { error: errorNormal } = await supabase.from("app_inbound_shipment_items").insert(payloadNormal);
+    const { error: errorNormal } = await supabase.from("app_inbound_shipment_items").insert(payloadNormal as any);
     if (errorNormal) {
       message.error(`Speichern fehlgeschlagen: ${errorNormal.message}`);
       return;
     }
 
-    const { error: errorSpecial } = await supabase.from("app_inbound_shipment_items").insert(payloadSpecial);
+    const { error: errorSpecial } = await supabase.from("app_inbound_shipment_items").insert(payloadSpecial as any);
     if (errorSpecial) {
       message.error(`Speichern fehlgeschlagen: ${errorSpecial.message}`);
       return;

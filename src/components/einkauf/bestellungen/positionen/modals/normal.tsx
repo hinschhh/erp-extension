@@ -45,23 +45,26 @@ export default function ButtonEinkaufBestellpositionenNormalHinzufuegen({orderId
     });
 
         const ausArtikelKopieren = async () => {
-        const { data, error } = await dataProvider
-            .from("app_products")
-            .select("supplier_sku, bb_net_purchase_price, purchase_details")
-            .eq("id", form.getFieldValue("billbee_product_id"))
-            .single();
+            const { data, error } = await dataProvider
+                .from("app_products")
+                .select("supplier_sku, bb_net_purchase_price, purchase_details")
+                .eq("id", form.getFieldValue("billbee_product_id"))
+                .single<{
+                    supplier_sku: string | null;
+                    bb_net_purchase_price: number | null;
+                }>();
 
-        if (error) {
-            console.error("Error fetching product:", error);
-        }
+            if (error) {
+                console.error("Error fetching product:", error);
+            }
 
-        const product = data;
+            const product = data;
 
-        form.setFieldsValue({
-            supplier_sku: product?.supplier_sku ?? "",
-            unit_price_net: product?.bb_net_purchase_price ?? 0,
-        });
-    };
+            form.setFieldsValue({
+                supplier_sku: product?.supplier_sku ?? "",
+                unit_price_net: product?.bb_net_purchase_price ?? 0,
+            });
+        };
 
     return (
         <>
