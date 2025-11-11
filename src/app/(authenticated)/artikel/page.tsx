@@ -13,6 +13,7 @@ import type { HttpError } from "@refinedev/core";
 import type { Tables } from "@/types/supabase";
 import { ColumnMultiSelectFilter, type ColumnFilterOption } from "@/components/common/table/ColumnMultiSelectFilter";
 import Link from "next/link";
+import SyncReferenceProductsButton from "@components/common/artikel/SyncReferenceProductsButton";
 
 /* ---------- Typen ---------- */
 type Row = Tables<"app_products">;
@@ -91,7 +92,9 @@ export default function ArtikelListPage() {
   );
 
   return (
-    <List title="Artikel">
+    <List title="Artikel"
+      headerButtons={<SyncReferenceProductsButton />}
+    >
       <Table<Row>
         rowKey="id"
         {...tableProps}

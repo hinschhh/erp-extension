@@ -20,7 +20,7 @@ type Props = {
 export default function SyncReferenceProductsButton({
   refreshAfter = false,
   size = "middle",
-  label = "Referenzprodukte synchronisieren",
+  label = "Produktdaten von Billbee synchronisieren",
   functionUrl = "https://nqdhcsebxybveezqfnyl.supabase.co/functions/v1/sync_reference_products",
 }: Props) {
   const { message } = App.useApp();
