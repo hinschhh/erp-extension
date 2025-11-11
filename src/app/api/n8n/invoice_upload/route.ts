@@ -14,15 +14,13 @@ export async function POST(req: NextRequest) {
 
     // Optionale Metadaten, die du im n8n-Workflow nutzen kannst
     const orderId = String(formData.get("orderId") ?? "");
-    const note = String(formData.get("note") ?? "");
-    const subFolder = String(formData.get("subFolder") ?? "");
+    const isPaid = formData.get("is_paid") ?? "";
 
     // Neues FormData für n8n aufbauen (kein BasePath nötig, ist dort fix)
     const forward = new FormData();
     forward.append("file", file, file.name);
     forward.append("orderId", orderId);
-    forward.append("note", note);
-    forward.append("subFolder", subFolder);
+    forward.append("is_paid", isPaid);
 
     const webhookUrl = process.env.N8N_WEBHOOK_URL_INVOICE_TO_DROPBOX;
     const authHeader = process.env.N8N_WEBHOOK_HEADER_AUTH_VALUE;

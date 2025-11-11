@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Button, DatePicker, Form, message, Modal, Tooltip, Upload } from "antd";
+import { Button, Checkbox, DatePicker, Form, message, Modal, Tooltip, Upload } from "antd";
 import type { UploadFile, RcFile } from "antd/es/upload/interface";
 import { useOne, useInvalidate } from "@refinedev/core";
 import dayjs, { Dayjs } from "dayjs";
@@ -13,6 +13,7 @@ import {
 import { Tables } from "@/types/supabase";
 import { supabaseBrowserClient } from "@utils/supabase/client";
 import { useModalForm } from "@refinedev/antd";
+import { useInitialValue } from "@dnd-kit/core/dist/hooks/utilities";
 
 type PurchaseOrder = Tables<"app_purchase_orders">;
 type Props = { orderId: string; onSuccess?: () => void };
@@ -37,7 +38,7 @@ export default function OrderStatusActionButton({ orderId, onSuccess }: Props) {
   /** Speichert DoL und setzt Status über RPC. Upload wird vor dem RPC erledigt. */
   const runAction = async (
   nextStatus: "ordered" | "confirmed",
-  opts?: { dolPlannedAt?: Dayjs | null; invoiceFile?: File | null }
+  opts?: { dolPlannedAt?: Dayjs | null; invoiceFile?: File | null; isPaid?: boolean;}
 ) => {
   try {
     setSubmitting(true);
@@ -52,6 +53,10 @@ export default function OrderStatusActionButton({ orderId, onSuccess }: Props) {
         fd.append("supplier", String(supplier));
       }
       fd.append("context", "purchase_order_invoice");
+
+      if (typeof opts.isPaid === "boolean") {
+        fd.append("is_paid", String(opts.isPaid)); // "true" / "false"
+      }
 
       const res = await fetch("/api/n8n/invoice_upload", {
         method: "POST",
@@ -176,9 +181,12 @@ export default function OrderStatusActionButton({ orderId, onSuccess }: Props) {
     const dolPlannedAt: Dayjs | null = values?.dol_planned_at ?? null;
     const file = fileList[0]?.originFileObj as File | undefined;
 
+    const isPaid: boolean = !!values?.is_paid;
+
     await runAction("confirmed", {
       dolPlannedAt,
       invoiceFile: file ?? null,
+      isPaid,
     });
 
     // Modal schließen, Liste zurücksetzen
@@ -226,6 +234,14 @@ export default function OrderStatusActionButton({ orderId, onSuccess }: Props) {
           <Form
             {...formPropsSubmitOrder}
             layout="vertical"
+            initialValues={{
+            // Alle bisherigen Initialwerte von refine übernehmen
+            ...formPropsSubmitOrder.initialValues,
+            // Und DANN unseren Standard setzen, falls noch nichts da ist
+            dol_planned_at:
+              formPropsSubmitOrder.initialValues?.dol_planned_at ??
+              dayjs().add(7, "day"),
+          }}
             onFinish={handleFinish}
           >
             <p>
@@ -234,21 +250,18 @@ export default function OrderStatusActionButton({ orderId, onSuccess }: Props) {
             </p>
 
             <Form.Item
-              required
               label="Erwartetes DoL"
               name="dol_planned_at"
-              rules={[{ required: true, message: "Bitte Datum wählen" }]}
+              rules={[{ required: true, message: "Bitte DoL setzen" }]}
             >
               <DatePicker format={"DD.MM.YYYY"} placeholder="Datum wählen..." />
             </Form.Item>
 
             <Form.Item
-              required
               label="Rechnung hochladen"
               name="invoice_upload"
               valuePropName="fileList"
               getValueFromEvent={normFile}
-              rules={[{ required: true, message: "Bitte Datei hochladen" }]}
             >
               <Upload.Dragger
                 multiple={false}
@@ -269,7 +282,11 @@ export default function OrderStatusActionButton({ orderId, onSuccess }: Props) {
                 </p>
               </Upload.Dragger>
             </Form.Item>
-
+            <Form.Item name="is_paid" valuePropName="checked">
+              <Checkbox>
+                Bestellung ist bezahlt!
+              </Checkbox>
+            </Form.Item>
             <Form.Item>
               <Button
                 type="primary"
