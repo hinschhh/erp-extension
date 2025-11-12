@@ -155,6 +155,7 @@ export default function OrderStatusActionButton({ orderId, onSuccess }: Props) {
     resource: "app_purchase_orders",
     id: orderId,
     redirect: false,
+    warnWhenUnsavedChanges: false,
   });
 
   /** AntD Upload Normalizer für Form.Item */
