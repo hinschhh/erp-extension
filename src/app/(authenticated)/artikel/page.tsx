@@ -134,7 +134,7 @@ export default function ArtikelListPage() {
             ) : (
               
               <Link href={`/artikel/anzeigen/${r.id}`}>
-                "—"
+                —
               </Link>
             )
           }
