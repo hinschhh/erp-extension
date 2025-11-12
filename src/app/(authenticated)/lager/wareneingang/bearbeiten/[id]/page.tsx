@@ -107,7 +107,7 @@ export default function InboundShipmentCreatePage() {
       </Form>
       
     </Edit>
-    <InboundItems inboundShipmentId={formProps?.initialValues?.id as string} inboundShipmentStatus={formProps?.initialValues?.status as "planned" | "delivered" | "posted"} />
+    <InboundItems inboundShipmentId={formProps?.initialValues?.id as string} inboundShipmentStatus={formProps?.initialValues?.status as "planned" | "delivered" | "posted"} inboundShipmentSupplier={formProps?.initialValues?.fk_bb_supplier as string} />
     </>
   );
 }

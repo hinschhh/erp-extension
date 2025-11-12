@@ -13,7 +13,7 @@ import { supabaseBrowserClient } from "@/utils/supabase/client";
 type POItemsNormal = Omit<Tables<"app_purchase_orders_positions_normal_view">, "id"> & { id: string };
 type POItemsSpecial = Omit<Tables<"app_purchase_orders_positions_special_view">, "id"> & { id: string };
 
-export default function SelectPOOrderModal({ inboundShipmentId, inboundShipmentStatus }: { inboundShipmentId: string, inboundShipmentStatus: "planned" | "delivered" | "posted" }) {
+export default function SelectPOOrderModal({ inboundShipmentId, inboundShipmentStatus, inboundShipmentSupplier }: { inboundShipmentId: string, inboundShipmentStatus: "planned" | "delivered" | "posted", inboundShipmentSupplier: string }) {
   const [selectedNormalIds, setSelectedNormalIds] = useState<string[]>([]);
   const [selectedSpecialIds, setSelectedSpecialIds] = useState<string[]>([]);
 
@@ -49,6 +49,17 @@ export default function SelectPOOrderModal({ inboundShipmentId, inboundShipmentS
         operator: "nnull",
         value: null,
       },
+      {
+
+        field: "status",
+        operator: "ne",
+        value: "delivered",
+      },
+      {
+        field: "supplier",
+        operator: "eq",
+        value: inboundShipmentSupplier,
+      }
     ],
     onSearch: (value) => [
     { field: "order_number", operator: "contains", value: `%${value}%` },

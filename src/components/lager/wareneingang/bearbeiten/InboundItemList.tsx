@@ -13,7 +13,7 @@ import TextArea from "antd/es/input/TextArea";
 
 type InboundItems = Tables<"app_inbound_shipment_items">;
 
-export default function InboundItems({ inboundShipmentId, inboundShipmentStatus }: { inboundShipmentId: string, inboundShipmentStatus: "planned" | "delivered" | "posted" }) {
+export default function InboundItems({ inboundShipmentId, inboundShipmentStatus, inboundShipmentSupplier }: { inboundShipmentId: string, inboundShipmentStatus: "planned" | "delivered" | "posted", inboundShipmentSupplier: string }) {
   const [qtyOpenByPoItem, setQtyOpenByPoItem] = useState<Record<string, number>>({});
 
   const {
@@ -107,7 +107,7 @@ export default function InboundItems({ inboundShipmentId, inboundShipmentStatus 
         <h3>Positionen</h3>
         <Space>
           <SelectISItemModal />
-          <SelectPOOrderModal inboundShipmentId={inboundShipmentId} inboundShipmentStatus={inboundShipmentStatus} />
+          <SelectPOOrderModal inboundShipmentId={inboundShipmentId} inboundShipmentStatus={inboundShipmentStatus} inboundShipmentSupplier={inboundShipmentSupplier} />
         </Space>
       </div>
       <Form {...formProps}>
