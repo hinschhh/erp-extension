@@ -129,10 +129,13 @@ export default function ArtikelListPage() {
           render={(v: Row["bb_sku"], r) =>
             v ? (
               <Link href={`/artikel/anzeigen/${r.id}`}>
-                <Typography.Text code>{v}</Typography.Text>
+                {v}
               </Link>
             ) : (
-              "—"
+              
+              <Link href={`/artikel/anzeigen/${r.id}`}>
+                "—"
+              </Link>
             )
           }
         />

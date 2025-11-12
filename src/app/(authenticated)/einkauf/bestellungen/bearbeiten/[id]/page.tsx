@@ -9,7 +9,7 @@ import {
   RefreshButton,
   ListButton,
 } from "@refinedev/antd";
-import { Button, Checkbox, Col, DatePicker, Form, Input, InputNumber, Row, message } from "antd";
+import { Button, Card, Checkbox, Col, DatePicker, Form, Input, InputNumber, Row, Tabs, TabsProps, message } from "antd";
 import dayjs from "dayjs";
 
 import { Tables } from "@/types/supabase";
@@ -21,6 +21,7 @@ import EinkaufBestellpositionenNormalBearbeiten from "@components/einkauf/bestel
 import EinkaufBestellpositionenSpecialBearbeiten from "@components/einkauf/bestellungen/positionen/special";
 import OrderStatusActionButton from "@components/common/buttons/po_order_confirm";
 import { useCallback, useEffect } from "react";
+import ZugehoerigeWareneingänge from "@components/einkauf/bestellungen/listInboundShipments";
 
 type Po = Tables<"app_purchase_orders">;
 
@@ -59,6 +60,22 @@ export default function EinkaufsBestellungenBearbeiten() {
   // refetch kann bei refine optional sein → doppelt absichern
   queryResult?.refetch?.();
 }, [queryResult])
+
+const items: TabsProps['items'] =[
+  {
+    key: '1',
+    label: `Positionen`,
+    children: <>
+                <EinkaufBestellpositionenNormalBearbeiten orderId={orderIdStr as string} supplier={supplier as string} status={status as string} />
+                <EinkaufBestellpositionenSpecialBearbeiten orderId={orderIdStr as string} supplier={supplier as string} status={status as string}/>
+            </>,
+  },
+  {
+    key: '2',
+    label: `Wareneingänge`,
+    children: <ZugehoerigeWareneingänge orderId={orderIdStr as string} />
+  }
+]
 
   return (
     <>
@@ -147,8 +164,10 @@ export default function EinkaufsBestellungenBearbeiten() {
         </Row>
       </Form>
     </Edit>
-        <EinkaufBestellpositionenNormalBearbeiten orderId={orderIdStr as string} supplier={supplier as string} status={status as string} />
-        <EinkaufBestellpositionenSpecialBearbeiten orderId={orderIdStr as string} supplier={supplier as string} status={status as string}/>
+    <Card style={{ marginTop: 16 }}>
+      <Tabs items={items} />
+    </Card>
+    
     </>
   );
 }

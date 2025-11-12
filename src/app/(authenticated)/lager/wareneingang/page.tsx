@@ -10,6 +10,7 @@ type InboundShipment = Tables<"app_inbound_shipments">;
 export default function InboundShipmentsListPage() {
 const {tableProps} = useTable<InboundShipment>({
   resource: "app_inbound_shipments",
+  meta: { select: "*, app_inbound_shipment_items(*, app_purchase_orders(invoice_number))" },
   sorters: { initial: [{ field: "created_at", order: "desc" }], mode: "server"  },
   filters: { initial: [], mode: "server" },
   pagination: { pageSize: 20 },
@@ -41,6 +42,7 @@ return (
       )}
     />
     <Table.Column title="Lieferscheinnummer" dataIndex="delivery_note_no" sorter />
+    <Table.Column title="Rechnungsnummer" dataIndex={["app_inbound_shipment_items", "app_purchase_orders", "invoice_number"]} sorter />
     <Table.Column title="Lieferant" dataIndex="fk_bb_supplier" sorter />
     <Table.Column title="Notiz" dataIndex="notes" sorter />
     <Table.Column title="Aktionen" key="actions" render={(_, record) => (
