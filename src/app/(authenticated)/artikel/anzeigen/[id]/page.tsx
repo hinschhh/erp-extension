@@ -11,6 +11,7 @@ import type { Tables } from "@/types/supabase";
 import type { HttpError } from "@refinedev/core";
 import { supabaseBrowserClient } from "@/utils/supabase/client";
 import SyncStockSingleProductButton from "@/components/artikel/SyncStockSingleProductButton";
+import { PoItemStatusTag } from "@components/common/tags/states/po_item";
 
 /* ---------- Typen ---------- */
 type AppProduct = Tables<"app_products">;
@@ -44,6 +45,7 @@ type PoItemRow = {
   id: string;
   order_id: string;
   order_number: string;
+  po_item_status?: string;
   supplier_name: string;
   internal_sku: string;
   qty: number;
@@ -286,11 +288,11 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
         const [{ data: n }, { data: s }] = await Promise.all([
           supabase
             .from("app_purchase_orders_positions_normal")
-            .select("id, order_id, billbee_product_id, qty_ordered, unit_price_net")
+            .select("id, order_id, po_item_status, billbee_product_id, qty_ordered, unit_price_net")
             .eq("billbee_product_id", idNum),
           supabase
             .from("app_purchase_orders_positions_special")
-            .select("id, order_id, billbee_product_id, base_model_billbee_product_id, qty_ordered, unit_price_net")
+            .select("id, order_id, po_item_status, billbee_product_id, base_model_billbee_product_id, qty_ordered, unit_price_net")
             .or(`base_model_billbee_product_id.eq.${idNum},billbee_product_id.eq.${idNum}`),
         ]);
 
@@ -298,6 +300,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
           ...(n ?? []).map((r: any) => ({
             id: r.id as string,
             order_id: r.order_id as string,
+            po_item_status: r.po_item_status as string,
             qty: Number(r.qty_ordered ?? 0),
             unit_price_net: typeof r.unit_price_net === "number" ? r.unit_price_net : null,
             kind: "normal" as const,
@@ -305,6 +308,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
           ...(s ?? []).map((r: any) => ({
             id: r.id as string,
             order_id: r.order_id as string,
+            po_item_status: r.po_item_status as string,
             qty: Number(r.qty_ordered ?? 0),
             unit_price_net: typeof r.unit_price_net === "number" ? r.unit_price_net : null,
             kind: "special" as const,
@@ -352,6 +356,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
         const rows: PoItemRow[] = combined.map((c) => ({
           id: c.id,
           order_id: c.order_id,
+          po_item_status: c.po_item_status,
           order_number: poMap.get(c.order_id)?.order_number ?? "—",
           supplier_name: poMap.get(c.order_id)?.supplier ?? "—",
           internal_sku: sku ?? "—",
@@ -661,6 +666,9 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
                   ),
                 },
                 { title: "Lieferant", dataIndex: "supplier_name", width: 220 },
+                {title: "Status", dataIndex: "po_item_status", width: 120, 
+                  render: (v: string, r) => <PoItemStatusTag status={v}/>
+                },  
                 { title: "Interne SKU", dataIndex: "internal_sku", width: 160 },
                 {
                   title: "Menge",

@@ -11,10 +11,11 @@ import {
 } from "@refinedev/antd";
 import type { HttpError } from "@refinedev/core";
 import { ColumnMultiSelectFilter, type ColumnFilterOption } from "@/components/common/table/ColumnMultiSelectFilter";
+import Link from "next/link";
 
 /* ---------- Typen ---------- */
 type Row = {
-  billbee_product_id: number;
+  product_id: number;
   sku: string | null;
   inventory_category: string | null;
   supplier: string | null;
@@ -129,10 +130,6 @@ export default function BestellvorschlaegePage() {
           pageSizeOptions: [50, 100, 250, 500],
           showTotal: (t) => `${t} Einträge`,
         }}
-        tableLayout="fixed"
-        sticky={{}}
-        scroll={{ x: "max-content", y: "90vh" }}
-        style={{ flex: 1, overflow: "auto", height: "50%" }}
       >
         {/* SKU */}
         <Table.Column<Row>
@@ -147,13 +144,13 @@ export default function BestellvorschlaegePage() {
           filterDropdown={(fp) => (
             <ColumnMultiSelectFilter {...fp} options={skuOptions} placeholder="SKU wählen…" />
           )}
-          render={(v) => <Typography.Text code>{v ?? "—"}</Typography.Text>}
+          render={(v, r) => <Link href={`/artikel/anzeigen/${r.product_id}`}>{v || "—"}</Link>}
         />
 
         {/* Inventur-Kategorie */}
         <Table.Column<Row>
           title="Inventur-Kategorie"
-          dataIndex="inventory_category"
+          dataIndex="inventory_cagtegory"
           width={150}
           ellipsis
           sorter

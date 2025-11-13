@@ -17,7 +17,7 @@ export default function EinkaufsBestellungenÜbersicht() {
     resource: "app_purchase_orders_view",
     meta: { select: "*" },
     sorters: { initial: [{ field: "created_at", order: "desc" }], mode: "server" },
-    filters: { initial: [{field: "status", operator: "ne", value: "delivered"}], mode: "server" },
+    filters: { mode: "server" },
     pagination: { pageSize: 20 },
     syncWithLocation: true,
   });
