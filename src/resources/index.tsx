@@ -27,6 +27,14 @@ const resources: IResourceItem[] = [
     icon: <PhoneOutlined />,
     options: { label: "Kundenberatung" },
   },
+  // Aufträge (DB: app_orders)
+  {
+    name: "app_orders",
+    list: "/kundenberatung/auftrag",
+    show: "/kundenberatung/auftrag/:id",
+    parentName: "kundenberatung",
+    options: { label: "Aufträge" },
+  },
   // Reklamationen (DB: app_complaints)
   {
     name: "app_complaints",

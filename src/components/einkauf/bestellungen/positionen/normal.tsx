@@ -9,6 +9,7 @@
    DeleteButton,
    SaveButton,
    NumberField,
+   TextField,
  } from "@refinedev/antd";
  import { Button, Card, DatePicker, Form, Input, Select, Space, Table } from "antd";
  import { CloseOutlined } from "@ant-design/icons";
@@ -19,14 +20,17 @@
  import ButtonEinkaufBestellpositionenNormalHinzufuegen from "@components/einkauf/bestellungen/positionen/modals/normal";
  
  import { formatCurrencyEUR, parseNumber } from "@/utils/formats";
+import { Link } from "@refinedev/core";
 
  type PoItemNormal = Omit<Tables<"app_purchase_orders_positions_normal_view">, "id"> & { id: string };
  type Produkte = Tables<"app_products">;
+ type OrderBase = Tables<"app_orders_with_customers_view">;
+ type Order = Omit<OrderBase, "id"> & { id: number };
 
  export default function EinkaufBestellpositionenNormalBearbeiten({orderId, supplier, status}: {orderId: string, supplier: string, status: string}) {
   const {
     formProps: formPropsEditableTableNormal,
-    isEditing: isEditingEditableTableNormal,
+    isEditing,
     setId: setIdEditableTableNormal,
     saveButtonProps: saveButtonPropsEditableTableNormal,
     cancelButtonProps: cancelButtonPropsEditableTableNormal,
@@ -43,7 +47,7 @@
     },
   });
 
-      const { selectProps } = useSelect<Produkte>({
+      const { selectProps: selectPropsProducts } = useSelect<Produkte>({
           resource: "app_products",
           optionLabel: "bb_sku",
           optionValue: "id",
@@ -54,7 +58,21 @@
               value: supplier,
           }],
 
-  });
+      });
+
+      const { selectProps: selectPropsOrders } = useSelect<Order>({
+              resource: "app_orders_with_customers_view",
+              optionLabel: (item) => `${item["bb_import_ab-nummer"]} - (${item.customer_name})`,
+              optionValue: "id",
+              onSearch: (value: string) => [
+      
+                  {
+                      field: "search_blob",
+                      operator: "contains",
+                      value,
+                  },
+              ],
+          })
 
 
   return (
@@ -71,7 +89,7 @@
         >
           <Table
             id="editable-table-normal"
-            scroll={{ x: 1400 }}
+            scroll={{ x: 5000 }}
             tableLayout="fixed"
             {...editableTablePropsNormal}
             rowKey="id"
@@ -90,15 +108,15 @@
               title="SKU"
               dataIndex={["app_products", "bb_sku"]}
               fixed="left"
-              width={180}
+              width={200}
               render={(value, record: any) => {
-                if (isEditingEditableTableNormal(record.id)) {
+                if (isEditing(record.id)) {
                   return (
                     <Form.Item
                       name="billbee_product_id"
                       style={{ margin: 0 }}
                     >
-                          <Select {...selectProps} />
+                          <Select {...selectPropsProducts} />
 
                     </Form.Item>
                   );
@@ -110,9 +128,9 @@
             {/* Status */}
             <Table.Column
               title="Status"
-              width={150}
+              width={200}
               render={(_, record: PoItemNormal) => {
-                if (isEditingEditableTableNormal(record.id as string)) {
+                if (isEditing(record.id as string)) {
                   return (
                     <Form.Item
                       name="po_item_status"
@@ -130,9 +148,9 @@
             <Table.Column
               title="DoL geplant"
               dataIndex="dol_planned_at"
-              width={150}
+              width={200}
               render={(value, record: PoItemNormal) => {
-                if (isEditingEditableTableNormal(record.id as string)) {
+                if (isEditing(record.id as string)) {
                   return (
                     <Form.Item
                       name="dol_planned_at"
@@ -151,7 +169,7 @@
             <Table.Column
               title="Externe SKU"
               dataIndex={["app_products", "supplier_sku"]}
-              width={150}
+              width={200}
             />
 
             {/* Details */}
@@ -165,9 +183,9 @@
             <Table.Column
               title="Menge"
               dataIndex="qty_ordered"
-              width={120}
+              width={200}
               render={(value, record: PoItemNormal) => {
-                if (isEditingEditableTableNormal(record.id as string)) {
+                if (isEditing(record.id as string)) {
                   return (
                     <Form.Item
                       name="qty_ordered"
@@ -191,9 +209,9 @@
             <Table.Column
               title="Einzel Netto"
               dataIndex="unit_price_net"
-              width={150}
+              width={200}
               render={(value: number, record: PoItemNormal) => {
-                if (isEditingEditableTableNormal(record.id as string)) {
+                if (isEditing(record.id as string)) {
                   return (
                     <Form.Item
                       name="unit_price_net"
@@ -210,7 +228,7 @@
             {/* Gesamt Netto */}
             <Table.Column
               title="Gesamt Netto"
-              width={160}
+              width={200}
               render={(_, record: PoItemNormal) => {
                 const total = (record.unit_price_net ?? 0) * (record.qty_ordered ?? 0);
                 return formatCurrencyEUR(total);
@@ -237,7 +255,24 @@
                 return formatCurrencyEUR(total);
               }}
             />
-
+            <Table.Column title="Bestellreferenz" dataIndex="fk_app_orders_id" 
+                width={200} sorter 
+                render={(value, record) => {
+                    if (isEditing(record.id as string)) {
+                        return (
+                            <Form.Item
+                                name="fk_app_orders_id"
+                                style={{ margin: 0 }}
+                            >
+                                <Select  {...selectPropsOrders} />
+                            </Form.Item>
+                        );
+                    }
+                    if (!record.bb_order_number && !record.customer_name) {
+                      return "—";
+                    }
+                    return <TextField value={`${record.bb_order_number ?? ""} - (${record.customer_name ?? ""})`} />;}}
+              />
             {/* Notizen */}
             <Table.Column
               title="Anmerkungen"
@@ -245,7 +280,7 @@
               fixed="right"
               width={400}
               render={(value: string | null | undefined, record: PoItemNormal) => {
-                if (isEditingEditableTableNormal(record.id as string)) {
+                if (isEditing(record.id as string)) {
                   return (
                     <Form.Item
                       name="internal_notes"
@@ -266,7 +301,7 @@
               fixed="right"
               width={90}
               render={(_, record: PoItemNormal) => {
-                if (isEditingEditableTableNormal(record.id as string)) {
+                if (isEditing(record.id as string)) {
                   return (
                     <Space>
                       <SaveButton

@@ -1,7 +1,7 @@
 // src/components/einkauf/bestellungen/positionen/special.tsx
 "use client";
 import { useEditableTable, useSelect, EditButton, SaveButton, TextField, NumberField, DateField, useModal, DeleteButton} from "@refinedev/antd";
-import { Form, Table, Button, Space, Input, DatePicker, Tooltip, Modal, Card } from "antd";
+import { Form, Table, Button, Space, Input, DatePicker, Tooltip, Modal, Card, Select } from "antd";
 import { CloseOutlined, FileTextOutlined } from "@ant-design/icons";
 import { Tables } from "@/types/supabase";
 import { PoItemStatusTag } from "@components/common/tags/states/po_item";
@@ -14,6 +14,8 @@ import SketchConfirmButton from "@components/common/buttons/confirmSketchButton"
 
  type PoItemSpecial = Omit<Tables<"app_purchase_orders_positions_special_view">, "id"> & { id: string };
  type Produkte = Tables<"app_products">;
+ type OrderBase = Tables<"app_orders_with_customers_view">;
+ type Order = Omit<OrderBase, "id"> & { id: number };
 
 export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supplier, status}: {orderId: string, supplier: string, status: string}) {
      const {
@@ -25,7 +27,7 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
         editButtonProps,
         tableProps,
       } = useEditableTable<PoItemSpecial>({
-        resource: "app_purchase_orders_positions_special",
+        resource: "app_purchase_orders_positions_special_view",
         filters: {
           permanent: orderId ? [{ field: "order_id", operator: "eq", value: orderId }] : [],
         },
@@ -48,6 +50,20 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
     
       });
 
+      const {selectProps: selectPropsOrders } = useSelect<Order>({
+                resource: "app_orders_with_customers_view",
+                optionLabel: (item) => `${item["bb_import_ab-nummer"]} - (${item.customer_name})`,
+                optionValue: "id",
+                onSearch: (value: string) => [
+        
+                    {
+                        field: "search_blob",
+                        operator: "contains",
+                        value,
+                    },
+                ],
+            })
+
   return (
     <Card style={{ marginTop: 24 }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -62,7 +78,7 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
 
         <Table
             id="table-po-items-special"
-            scroll={{ x: 1400 }}
+            scroll={{ x: 5000 }}
             tableLayout="fixed"
             {...tableProps} 
             rowKey="id"
@@ -198,22 +214,26 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                     return formatCurrencyEUR(record.shipping_costs_proportional ?? 0);
                 }}
             />
-            <Table.Column title="AB-Ref" dataIndex="order_confirmation_ref"
+            <Table.Column title="AB-Ref" dataIndex="fk_app_orders_id"
                 width={200}
                 render={(value, record: PoItemSpecial) => {
                     if (isEditing(record.id)) {
                       return (
                         <Form.Item 
-                            name="order_confirmation_ref" 
+                            name="fk_app_orders_id" 
                             style={{ margin: 0 }}
                         >
-                            <Input />
+                            <Select  {...selectPropsOrders}/>
                         </Form.Item>
                         );
                     }
-                    return <TextField value={value} />;
+                    if (!record.bb_order_number && !record.customer_name) {
+                      return "—";
+                    }
+                    return <TextField value={`${record.bb_order_number ?? ""} - (${record.customer_name ?? ""})`} />;
                 }}
             />
+
             <Table.Column title="Dokumente" dataIndex="external_file_url"
                 width={200}
                 render={(value, record: PoItemSpecial) => {
