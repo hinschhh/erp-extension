@@ -1,4 +1,4 @@
-/*"use client";
+"use client";
 
 import * as React from "react";
 import { List } from "@refinedev/antd";
@@ -17,8 +17,11 @@ type StagesWithComplaints = Stages & {
     complaints: Complaints[];
 };
 
-
 export default function PageComplaints() {
+    return null;
+}
+
+/*export default function PageComplaints() {
   const { data: stages, isLoading: isLoadingStages } = useList<Stages>({
     resource: "app_complaints_stages",
   });

@@ -48,7 +48,7 @@ export default function StageSpalte({children, id, title, description, count, da
                        />
                         {!! count && <Badge count={count} color="cyan" />}
                     </Space>
-                    <AddReklamationButton onAddClick={onAddClick} id={id} />
+                    {/*<AddReklamationButton onAddClick={onAddClick} id={id} />*/}
 
                 </Space>
                 {description}

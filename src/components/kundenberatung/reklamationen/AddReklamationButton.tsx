@@ -1,4 +1,4 @@
-/*"use client";
+"use client";
 
 import { PlusOutlined } from "@ant-design/icons";
 import { useSelect, useModalForm } from "@refinedev/antd";
@@ -10,7 +10,11 @@ type Order = Omit<OrderBase, "id"> & { id: number };
 
 type OrderItem = Tables<"app_order_items">;
 
-export default function AddReklamationButton({
+export default function AddReklamationButton() {
+    return null;
+}
+
+/*export default function AddReklamationButton({
     onAddClick,
     id,
 }: {
