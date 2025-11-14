@@ -1,4 +1,4 @@
-"use client";
+/*"use client";
 
 import { PlusOutlined } from "@ant-design/icons";
 import { useSelect, useModalForm } from "@refinedev/antd";
@@ -109,4 +109,4 @@ export default function AddReklamationButton({
             </Modal>
         </>
     );
-}
+}*/
