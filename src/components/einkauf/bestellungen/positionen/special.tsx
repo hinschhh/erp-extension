@@ -29,6 +29,7 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
         filters: {
           permanent: orderId ? [{ field: "order_id", operator: "eq", value: orderId }] : [],
         },
+        pagination: { pageSize: 50 },
         meta: {
           select: "*, base_modell:app_products!app_purchase_orders_positions_base_model_billbee_product_i_fkey(bb_sku, supplier_sku, purchase_details), special_product:app_products!app_purchase_orders_positions_special_billbee_product_id_fkey(bb_sku)",
         },

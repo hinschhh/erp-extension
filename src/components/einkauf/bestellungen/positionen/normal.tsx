@@ -37,6 +37,7 @@
     filters: {
       permanent: orderId ? [{ field: "order_id", operator: "eq", value: orderId }] : [],
     },
+    pagination: { pageSize: 50 },
     meta: {
       select: "*, app_products(bb_sku, supplier_sku, purchase_details)",
     },

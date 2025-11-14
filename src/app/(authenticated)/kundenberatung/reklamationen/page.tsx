@@ -1,4 +1,4 @@
-"use client";
+/*"use client";
 
 import * as React from "react";
 import { List } from "@refinedev/antd";
@@ -130,4 +130,4 @@ export default function PageComplaints() {
       </KanbanBoardContainer>
     </List>
   );
-}
+}*/
