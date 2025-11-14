@@ -175,7 +175,6 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                         return (
                             <Form.Item
                                 name="unit_price_net"
-                                normalize={parseNumber}
                                 style={{ margin: 0 }}
                             >
                                 <Input type="number" step={0.01} />
