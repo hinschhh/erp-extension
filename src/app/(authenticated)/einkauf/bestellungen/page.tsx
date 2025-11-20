@@ -69,6 +69,10 @@ export default function EinkaufsBestellungenÜbersicht() {
     >
         <Table rowKey="id" {...tableProps} >
           <Table.Column title="Bestellnummer" dataIndex="order_number" sorter />
+          <Table.Column title="Bestellt am" dataIndex="ordered_at" sorter 
+          render={(value, record) => <>{value ? new Date(value).toLocaleDateString() : ""}</>}
+          
+          />
           <Table.Column title="Lieferant" dataIndex="supplier" 
             filterDropdown={(fp) => (
               <ColumnMultiSelectFilter {...fp} options={supplierSelectProps.options as ColumnFilterOption[]} placeholder="Lieferant wählen…" />
