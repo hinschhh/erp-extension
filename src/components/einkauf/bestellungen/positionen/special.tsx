@@ -22,7 +22,7 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
         formProps,
         isEditing,
         setId,
-        saveButtonProps,
+        saveButtonProps: saveButtonPropsEditableTableSpecial,
         cancelButtonProps,
         editButtonProps,
         tableProps,
@@ -92,8 +92,8 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
             })}
             
         >
-            <Table.Column title="SKU" dataIndex={["base_modell", "bb_sku"]} fixed="left" width={180}/>
-            <Table.Column title="Status" dataIndex="po_item_status" width={150}
+            <Table.Column title="SKU" dataIndex={["base_modell", "bb_sku"]} fixed="left" width={200}/>
+            <Table.Column title="Status" dataIndex="po_item_status" width={200}
                 render={(_, record: PoItemSpecial) => {
                                 if (isEditing(record.id)) {
                                   return (
@@ -108,7 +108,7 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                                 return <PoItemStatusTag status={record.po_item_status as string} />;
                     }}    
             />
-            <Table.Column title="DoL geplant" dataIndex="dol_expected_at" 
+            <Table.Column title="DoL geplant" dataIndex="dol_expected_at" width={400}
                           render={(value, record: PoItemSpecial) => {
                             if (isEditing(record.id)) {
                               return (
@@ -123,7 +123,7 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                             }
                             return <DateField value={dayjs(value)} />;
                           }}/>
-            <Table.Column title="Ext. SKU" dataIndex="supplier_sku" 
+            <Table.Column title="Externe SKU" dataIndex="supplier_sku" width={200}
                 render={(value, record: PoItemSpecial) => {
                     if (isEditing(record.id)) {
                       return (
@@ -154,7 +154,7 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                 }}
             />
             <Table.Column title="Skizze benötigt?" dataIndex="sketch_needed" hidden/>
-            <Table.Column title="Skizze" dataIndex="sketch_confirmed_at" 
+            <Table.Column title="Skizze" dataIndex="sketch_confirmed_at" width={200}
              render={(_, record) => {
                 return(
                     <SketchConfirmButton
@@ -280,7 +280,7 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                   return (
                     <Space>
                       <SaveButton
-                        {...saveButtonProps}
+                        {...saveButtonPropsEditableTableSpecial}
                         hideText
                         size="small"
                       />
