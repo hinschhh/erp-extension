@@ -55,14 +55,13 @@ return (
           </Col>
 
           <Col span={8}>
-            <Form.Item label="Rechnungsnummer" name="invoice_number">
+            <Form.Item label="Externe Bestellnummer" name="invoice_number">
               <Input />
             </Form.Item>
 
             <Form.Item label="Rechnungsdatum" name="invoice_date">
               <DatePicker type="date" placeholder="Datum wählen..." format="DD.MM.YYYY" style={{ width: "100%" }} />
             </Form.Item>
-
             <Form.Item
               label="Versandkosten netto"
               name="shipping_cost_net"

@@ -100,10 +100,10 @@ export default function OrderStatusActionButton({ orderId, onSuccess }: Props) {
       ...(dolForRpc ? { p_dol_planned_at: dolForRpc } : {}),
     };
 
-    console.log("Calling RPC rpc_po_items_set_status_for_order", payload);
+    console.log("Calling RPC rpc_app_purchase_orders_positions_po_item_status_set_for_order", payload);
 
     const { data, error } = await supabase.rpc(
-      "rpc_po_items_set_status_for_order",
+      "rpc_app_purchase_orders_positions_po_item_status_set_for_order",
       payload as any
     );
 

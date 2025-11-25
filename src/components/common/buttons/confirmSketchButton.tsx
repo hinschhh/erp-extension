@@ -52,7 +52,7 @@ export default function SketchConfirmButton({ itemId, onDone }: Props) {
     try {
       setSubmitting(true);
 
-      const { error } = await supabase.rpc("rpc_po_special_confirm_sketch", {
+      const { error } = await supabase.rpc("rpc_app_purchase_orders_positions_special_sketch_confirm_and_ad", {
         p_item_id: itemId,
       } as any);
 

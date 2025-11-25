@@ -119,7 +119,7 @@ const items: TabsProps['items'] =[
           </Col>
 
           <Col span={8}>
-            <Form.Item label="Rechnungsnummer" name="invoice_number">
+            <Form.Item label="Externe Bestellnummer" name="invoice_number">
               <Input />
             </Form.Item>
 
@@ -159,6 +159,9 @@ const items: TabsProps['items'] =[
           <Col span={8}>
             <Form.Item label="Notizen" name="notes">
               <Input.TextArea rows={6} />
+            </Form.Item>
+              <Form.Item label="Anzahlungsrechnungen (mehrere mit Komma trennen)" >
+            <Input />
             </Form.Item>
           </Col>
         </Row>

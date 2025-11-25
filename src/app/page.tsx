@@ -573,7 +573,9 @@ function Dashboard() {
               />
             </Col>
           </Row>
-
+          <Card>
+            <iframe width="100%" height="600" src="https://lookerstudio.google.com/embed/reporting/0d501022-71ee-489c-b99d-49187a9180df/page/YwlgF" style={{ border: 0 }} allowFullScreen sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>
+          </Card>
           {/* ---------- MODALS: max 90vw/80vh, Body scrollt ---------- */}
           <Modal
             title="OPOS: Versendet & nicht voll bezahlt"
