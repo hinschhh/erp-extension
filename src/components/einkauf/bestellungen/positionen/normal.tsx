@@ -11,7 +11,7 @@
    NumberField,
    TextField,
  } from "@refinedev/antd";
- import { Button, Card, DatePicker, Form, Input, Select, Space, Table } from "antd";
+ import { Button, Card, DatePicker, Form, Input, Select, Space, Table, Typography } from "antd";
  import { CloseOutlined } from "@ant-design/icons";
  import dayjs from "dayjs"; 
  import { Tables } from "@/types/supabase";
@@ -20,7 +20,6 @@
  import ButtonEinkaufBestellpositionenNormalHinzufuegen from "@components/einkauf/bestellungen/positionen/modals/normal";
  
  import { formatCurrencyEUR, parseNumber } from "@/utils/formats";
-import { Link } from "@refinedev/core";
 
  type PoItemNormal = Omit<Tables<"app_purchase_orders_positions_normal_view">, "id"> & { id: string };
  type Produkte = Tables<"app_products">;
@@ -89,9 +88,9 @@ import { Link } from "@refinedev/core";
         >
           <Table
             id="editable-table-normal"
-            scroll={{ x: 5000 }}
-            tableLayout="fixed"
             {...editableTablePropsNormal}
+            scroll={{ x: "100%" }}
+            tableLayout="fixed"
             rowKey="id"
             rowSelection={{ type: "checkbox" }}
             onRow={(record) => ({
@@ -108,7 +107,8 @@ import { Link } from "@refinedev/core";
               title="SKU"
               dataIndex={["app_products", "bb_sku"]}
               fixed="left"
-              width={200}
+              width={100}
+              ellipsis
               render={(value, record: any) => {
                 if (isEditing(record.id)) {
                   return (
@@ -128,7 +128,8 @@ import { Link } from "@refinedev/core";
             {/* Status */}
             <Table.Column
               title="Status"
-              width={200}
+              width={150}
+              ellipsis
               render={(_, record: PoItemNormal) => {
                 if (isEditing(record.id as string)) {
                   return (
@@ -148,7 +149,8 @@ import { Link } from "@refinedev/core";
             <Table.Column
               title="DoL geplant"
               dataIndex="dol_planned_at"
-              width={200}
+              width={150}
+              ellipsis
               render={(value, record: PoItemNormal) => {
                 if (isEditing(record.id as string)) {
                   return (
@@ -169,21 +171,27 @@ import { Link } from "@refinedev/core";
             <Table.Column
               title="Externe SKU"
               dataIndex={["app_products", "supplier_sku"]}
-              width={200}
+              width={150}
+              ellipsis
             />
 
             {/* Details */}
             <Table.Column
               title="Details"
               dataIndex={["app_products", "purchase_details"]}
-              width={600}
+              width={250}
+              ellipsis
+              render={(value: string) =>{
+               return <Typography.Paragraph style={{ whiteSpace: "normal", }} ellipsis={{ rows: 4, tooltip: value }}>{value ?? "—"}</Typography.Paragraph>;
+              }}
             />
 
             {/* Menge */}
             <Table.Column
               title="Menge"
               dataIndex="qty_ordered"
-              width={200}
+              width={100}
+              ellipsis
               render={(value, record: PoItemNormal) => {
                 if (isEditing(record.id as string)) {
                   return (
@@ -209,7 +217,8 @@ import { Link } from "@refinedev/core";
             <Table.Column
               title="Einzel Netto"
               dataIndex="unit_price_net"
-              width={200}
+              width={100}
+              ellipsis
               render={(value: number, record: PoItemNormal) => {
                 if (isEditing(record.id as string)) {
                   return (
@@ -228,7 +237,8 @@ import { Link } from "@refinedev/core";
             {/* Gesamt Netto */}
             <Table.Column
               title="Gesamt Netto"
-              width={200}
+              width={100}
+              ellipsis
               render={(_, record: PoItemNormal) => {
                 const total = (record.unit_price_net ?? 0) * (record.qty_ordered ?? 0);
                 return formatCurrencyEUR(total);
@@ -238,7 +248,8 @@ import { Link } from "@refinedev/core";
             {/* Versandkosten anteilig */}
             <Table.Column
               title="Versandkosten (anteilig)"
-              width={180}
+              width={100}
+              ellipsis
               render={(_, record: PoItemNormal) => {
                 return formatCurrencyEUR(record.shipping_costs_proportional ?? 0);
               }}
@@ -247,7 +258,8 @@ import { Link } from "@refinedev/core";
             {/* Anschaffungskosten gesamt */}
             <Table.Column
               title="Anschaffungskosten gesamt"
-              width={200}
+              width={100}
+              ellipsis
               render={(_, record: PoItemNormal) => {
                 const total =
                   (record.unit_price_net ?? 0) * (record.qty_ordered ?? 0) +
@@ -256,7 +268,7 @@ import { Link } from "@refinedev/core";
               }}
             />
             <Table.Column title="Bestellreferenz" dataIndex="fk_app_orders_id" 
-                width={200} sorter 
+                width={150} ellipsis
                 render={(value, record) => {
                     if (isEditing(record.id as string)) {
                         return (
@@ -278,7 +290,8 @@ import { Link } from "@refinedev/core";
               title="Anmerkungen"
               dataIndex="internal_notes"
               fixed="right"
-              width={400}
+              width={200}
+              ellipsis
               render={(value: string | null | undefined, record: PoItemNormal) => {
                 if (isEditing(record.id as string)) {
                   return (
@@ -286,7 +299,7 @@ import { Link } from "@refinedev/core";
                       name="internal_notes"
                       style={{ margin: 0 }}
                     >
-                      <Input.TextArea rows={1} />
+                      <Input.TextArea rows={5} />
                     </Form.Item>
                   );
                 }
@@ -300,6 +313,7 @@ import { Link } from "@refinedev/core";
               dataIndex="actions"
               fixed="right"
               width={90}
+              ellipsis
               render={(_, record: PoItemNormal) => {
                 if (isEditing(record.id as string)) {
                   return (

@@ -208,12 +208,7 @@ export default function BestellvorschlaegePage() {
 
         <Table.Column<Row>
           title="Verbrauch"
-          key="consumption_3m"
-          render={() => (
-            <Tooltip title="Rollierende 3-Monatssumme">
-              <span>—</span>
-            </Tooltip>
-          )}
+          dataIndex="consumption_3m_rolling"
         />
 
         <Table.Column<Row> title="aktualisiert am" dataIndex="updated_at" width={150} hidden />

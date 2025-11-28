@@ -1,7 +1,7 @@
 "use client";
 
 import { List, useTable, EditButton, DeleteButton, useSelect, CreateButton } from "@refinedev/antd";  // oder Create, Edit, Show
-import { Table, Space, Input } from "antd";
+import { Table, Space, Input, Typography } from "antd";
 import { Tables } from "@/types/supabase";
 import { PoStatusTag, statusMap } from "@/components/common/tags/states/po";
 import { ColumnFilterOption, ColumnMultiSelectFilter } from "@components/common/table/ColumnMultiSelectFilter";
@@ -93,7 +93,7 @@ export default function EinkaufsBestellungenÜbersicht() {
             }
             return "-";
           }}/>
-          <Table.Column title="Anmerkungen" dataIndex="notes" />
+          <Table.Column title="Anmerkungen" dataIndex="notes" render={(value) => <Typography.Paragraph ellipsis={{ rows: 5, expandable: true, symbol: 'mehr' }}>{value}</Typography.Paragraph>  } />
           <Table.Column title="Aktionen" dataIndex="actions" render={(_, record) => (
             <Space>
               <EditButton resource="app_purchase_orders" hideText size="small" recordItemId={record.order_id} />

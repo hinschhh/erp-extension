@@ -573,8 +573,6 @@ function Dashboard() {
               />
             </Col>
           </Row>
-          <Card>
-          </Card>
           {/* ---------- MODALS: max 90vw/80vh, Body scrollt ---------- */}
           <Modal
             title="OPOS: Versendet & nicht voll bezahlt"

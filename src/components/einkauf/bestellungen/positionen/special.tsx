@@ -1,7 +1,7 @@
 // src/components/einkauf/bestellungen/positionen/special.tsx
 "use client";
 import { useEditableTable, useSelect, EditButton, SaveButton, TextField, NumberField, DateField, useModal, DeleteButton} from "@refinedev/antd";
-import { Form, Table, Button, Space, Input, DatePicker, Tooltip, Modal, Card, Select } from "antd";
+import { Form, Table, Button, Space, Input, DatePicker, Tooltip, Modal, Card, Select, Cascader, Typography } from "antd";
 import { CloseOutlined, FileTextOutlined } from "@ant-design/icons";
 import { Tables } from "@/types/supabase";
 import { PoItemStatusTag } from "@components/common/tags/states/po_item";
@@ -11,6 +11,8 @@ import { formatCurrencyEUR, parseNumber } from "@/utils/formats";
 import { PoItemStatus } from "@/types/status";
 import ButtonEinkaufBestellpositionenSpezialHinzufuegen from "./modals/special";
 import SketchConfirmButton from "@components/common/buttons/confirmSketchButton";
+import { useOrderItemCascader } from "@components/common/selects/cascader_order_items";
+import { text } from "stream/consumers";
 
  type PoItemSpecial = Omit<Tables<"app_purchase_orders_positions_special_view">, "id"> & { id: string };
  type Produkte = Tables<"app_products">;
@@ -36,6 +38,26 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
           select: "*, base_modell:app_products!app_purchase_orders_positions_base_model_billbee_product_i_fkey(bb_sku, supplier_sku, purchase_details), special_product:app_products!app_purchase_orders_positions_special_billbee_product_id_fkey(bb_sku)",
         },
       });
+      const handleFinish: typeof formProps.onFinish = (values: any) => {
+        const path = values.order_item_cascader;
+
+        if (Array.isArray(path) && path.length === 2) {
+          const [orderId, orderItemId] = path;
+
+          values.fk_app_orders_id = orderId;
+          values.fk_app_order_items_id = orderItemId;
+        } else {
+          // Wenn nichts gewählt wurde, optional FK auf null setzen
+          values.fk_app_orders_id = null;
+          values.fk_app_order_items_id = null;
+        }
+
+        // Technisches UI-Feld rauswerfen (muss nicht in der DB landen)
+        delete values.order_item_cascader;
+
+        return formProps.onFinish?.(values);
+      };
+
     
           const { selectProps } = useSelect<Produkte>({
               resource: "app_products",
@@ -50,19 +72,7 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
     
       });
 
-      const {selectProps: selectPropsOrders } = useSelect<Order>({
-                resource: "app_orders_with_customers_view",
-                optionLabel: (item) => `${item["bb_import_ab-nummer"]} - (${item.customer_name})`,
-                optionValue: "id",
-                onSearch: (value: string) => [
-        
-                    {
-                        field: "search_blob",
-                        operator: "contains",
-                        value,
-                    },
-                ],
-            })
+      const { options, loading } = useOrderItemCascader();
 
   return (
     <Card style={{ marginTop: 24 }}>
@@ -74,13 +84,14 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
         {...formProps}
         title="Bestellpositionen - Sonderbestellungen"
         id="form-po-items-special"
+        onFinish={handleFinish}
     >
 
         <Table
             id="table-po-items-special"
-            scroll={{ x: 5000 }}
+            {...tableProps}
+            scroll={{ x: "100%" }}
             tableLayout="fixed"
-            {...tableProps} 
             rowKey="id"
             rowSelection={{ type: "checkbox" }}
             onRow={(record) => ({
@@ -92,8 +103,8 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
             })}
             
         >
-            <Table.Column title="SKU" dataIndex={["base_modell", "bb_sku"]} fixed="left" width={200}/>
-            <Table.Column title="Status" dataIndex="po_item_status" width={200}
+            <Table.Column title="SKU" dataIndex={["base_modell", "bb_sku"]} fixed="left" width={150} ellipsis={true} />
+            <Table.Column title="Status" dataIndex="po_item_status" width={150} ellipsis={false} 
                 render={(_, record: PoItemSpecial) => {
                                 if (isEditing(record.id)) {
                                   return (
@@ -108,7 +119,7 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                                 return <PoItemStatusTag status={record.po_item_status as string} />;
                     }}    
             />
-            <Table.Column title="DoL geplant" dataIndex="dol_expected_at" width={400}
+            <Table.Column title="DoL geplant" dataIndex="dol_expected_at" width={150} ellipsis={true} 
                           render={(value, record: PoItemSpecial) => {
                             if (isEditing(record.id)) {
                               return (
@@ -123,7 +134,7 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                             }
                             return <DateField value={dayjs(value)} />;
                           }}/>
-            <Table.Column title="Externe SKU" dataIndex="supplier_sku" width={200}
+            <Table.Column title="Externe SKU" dataIndex="supplier_sku" width={150} ellipsis={true} 
                 render={(value, record: PoItemSpecial) => {
                     if (isEditing(record.id)) {
                       return (
@@ -138,7 +149,7 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                     return <TextField value={value} />;
                 }}
             />
-            <Table.Column title="Details" dataIndex="details_override" width={600}
+            <Table.Column title="Details" dataIndex="details_override" width={250} ellipsis={true} 
                 render={(value, record: PoItemSpecial) => {
                     if (isEditing(record.id)) {
                       return (
@@ -146,15 +157,15 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                             name="details_override" 
                             style={{ margin: 0 }}
                         >
-                            <Input.TextArea rows={1}/>
+                            <Input.TextArea rows={4}/>
                         </Form.Item>
                         );
                     }
-                    return <TextField value={value} />;
+                    return <Typography.Paragraph style={{ whiteSpace: "normal", }} ellipsis={{ rows: 4, tooltip: value }}>{value}</Typography.Paragraph>;
                 }}
             />
             <Table.Column title="Skizze benötigt?" dataIndex="sketch_needed" hidden/>
-            <Table.Column title="Skizze" dataIndex="sketch_confirmed_at" width={200}
+            <Table.Column title="Skizze" dataIndex="sketch_confirmed_at" width={200} ellipsis={true}
              render={(_, record) => {
                 return(
                     <SketchConfirmButton
@@ -164,8 +175,8 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
 
              }} 
             />
-            <Table.Column title="Menge" dataIndex="qty_ordered"
-                width={120}
+            <Table.Column title="Menge" dataIndex="qty_ordered" ellipsis={true} 
+                width={100}
                 render={(value, record: PoItemSpecial) => {
                     if (isEditing(record.id)) {
                     return (
@@ -186,7 +197,7 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                     </>;
                 }}
             />
-            <Table.Column title="Preis" dataIndex="unit_price_net"              width={150}
+            <Table.Column title="Preis" dataIndex="unit_price_net" width={100} ellipsis={true} 
                 render={(value: number, record: PoItemSpecial) => {
                     if (isEditing(record.id)) {
                         return (
@@ -202,40 +213,84 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                 }}
             
             />
-            <Table.Column title="Gesamt" dataIndex="total_price_net" 
-            width={160}
+            <Table.Column title="Gesamt" dataIndex="total_price_net" ellipsis={true} 
+            width={100}
             render={(_, record: PoItemSpecial) => {
                 const total = (record.unit_price_net ?? 0) * (record.qty_ordered ?? 0);
                 return formatCurrencyEUR(total);
             }}/>
-            <Table.Column title="Versand anteilig" dataIndex="shipping_costs_proportional" 
-            width={180}
+            <Table.Column title="Versand anteilig" dataIndex="shipping_costs_proportional" ellipsis={true} 
+            width={100}
                 render={(_, record: PoItemSpecial) => {
                     return formatCurrencyEUR(record.shipping_costs_proportional ?? 0);
                 }}
             />
-            <Table.Column title="AB-Ref" dataIndex="fk_app_orders_id"
+            <Table.Column title="Referenz" dataIndex="order_item_cascader"
                 width={200}
                 render={(value, record: PoItemSpecial) => {
                     if (isEditing(record.id)) {
                       return (
+                        <>
                         <Form.Item 
-                            name="fk_app_orders_id" 
+                            name="order_item_cascader" 
                             style={{ margin: 0 }}
+                             getValueProps={() => {
+                                if (
+                                  !record.fk_app_orders_id ||
+                                  !record.fk_app_order_items_id
+                                ) {
+                                  return {};
+                                }
+                                return {
+                                  value: [
+                                    record.fk_app_orders_id,
+                                    record.fk_app_order_items_id,
+                                  ],
+                                };
+                              }}
                         >
-                            <Select  {...selectPropsOrders}/>
+                             <Cascader 
+                              options={options} 
+                              loading={loading}
+                              showSearch
+                              allowClear
+                              placeholder="Bestellung → Position"
+                              />
                         </Form.Item>
+                        <Form.Item name="fk_app_orders_id" hidden />
+                        <Form.Item name="fk_app_order_items_id" hidden />
+                        </>
                         );
                     }
                     if (!record.bb_order_number && !record.customer_name) {
                       return "—";
                     }
-                    return <TextField value={`${record.bb_order_number ?? ""} - (${record.customer_name ?? ""})`} />;
+                    return <Typography.Paragraph style={{ whiteSpace: "normal", }} ellipsis={{ rows: 4, tooltip: `${record.bb_order_number ?? ""} - (${record.customer_name ?? ""})` }}>{`${record.bb_order_number ?? ""} - (${record.customer_name ?? ""})`}</Typography.Paragraph>;
                 }}
             />
+            <Table.Column dataIndex="fk_app_order_items_id" hidden
+              render={(value, record: PoItemSpecial) => {
+                    if (isEditing(record.id)) {
+                      return (
+                        <Form.Item 
+                            name="fk_app_order_items_id" 
+                        />
+                        );
+                    }}}
+            />
+            <Table.Column dataIndex="fk_app_orders_id" hidden
+              render={(value, record: PoItemSpecial) => {
+                    if (isEditing(record.id)) {
+                      return (
+                        <Form.Item 
+                            name="fk_app_orders_id" 
+                        />
+                        );
+                    }}}
+            />
 
-            <Table.Column title="Dokumente" dataIndex="external_file_url"
-                width={200}
+            <Table.Column title="Dokumente" dataIndex="external_file_url" ellipsis={true} 
+                width={150}
                 render={(value, record: PoItemSpecial) => {
                 if (isEditing(record.id)) {
                     return (
@@ -257,9 +312,9 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                 return <TextField value="keine Dokumente hinterlegt"/>;
             }}
             />
-            <Table.Column title="Anmerkungen" dataIndex="internal_notes"
+            <Table.Column title="Anmerkungen" dataIndex="internal_notes" ellipsis={true} 
             fixed="right"
-                          width={400}
+                          width={200}
                           render={(value: string | null | undefined, record: PoItemSpecial) => {
                             if (isEditing(record.id)) {
                               return (
@@ -267,14 +322,14 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                                   name="internal_notes"
                                   style={{ margin: 0 }}
                                 >
-                                  <Input.TextArea rows={1} />
+                                  <Input.TextArea rows={5} />
                                 </Form.Item>
                               );
                             }
-                            return value ?? "—";
+                            return <Typography.Paragraph style={{ whiteSpace: "normal", }} ellipsis={{ rows: 4, tooltip: value }}>{value ?? "—"}</Typography.Paragraph>;
                           }}
             />
-            <Table.Column title="Aktionen" dataIndex="" fixed="right"
+            <Table.Column title="Aktionen" dataIndex="" width={100} ellipsis={true} fixed="right"
                 render={(_, record: PoItemSpecial) => {
                 if (isEditing(record.id)) {
                   return (

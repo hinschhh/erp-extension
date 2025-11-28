@@ -4,9 +4,10 @@
 import { useInvalidate } from "@refinedev/core";
 import { useModalForm, useSelect } from "@refinedev/antd";
 import { Tables } from "@/types/supabase";
-import { Button, Checkbox, Col, Flex, Form, Input, Modal, Row, Select, Space } from "antd";
+import { Button, Cascader, Checkbox, Col, Flex, Form, Input, Modal, Row, Select, Space } from "antd";
 import { useDataProvider, useOne, HttpError } from "@refinedev/core";
 import { supabaseBrowserClient } from "@utils/supabase/client";
+import {useOrderItemCascader} from "@components/common/selects/cascader_order_items";
 
 type PoItemSpecial = Tables<"app_purchase_orders_positions_special">;
 type Produkte = Tables<"app_products">;
@@ -18,7 +19,7 @@ type AutoValues = {
 
 export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderId, supplier, status}: {orderId: string, supplier: string, status: string}) {
     const invalidate = useInvalidate();
-    const { formProps: createFormProps, modalProps: createModalProps, show: createModalShow } = useModalForm<PoItemSpecial>({
+    const { formProps: createFormProps, modalProps: createModalProps, onFinish: refineOnFinish, show: createModalShow } = useModalForm<PoItemSpecial>({
         action: "create",
         resource: "app_purchase_orders_positions_special",
         redirect: false,
@@ -97,12 +98,29 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
             details_override: product?.purchase_details ?? "",
         });
     };
+    const handleFinish = (values: any) => {
+    const cascaderValue = values.order_item_cascader;
+
+    if (Array.isArray(cascaderValue) && cascaderValue.length === 2) {
+        const [orderId, orderItemId] = cascaderValue;
+
+        values.fk_app_orders_id = orderId;
+        values.fk_app_order_items_id = orderItemId;
+    }
+
+    // UI-Feld rausnehmen (falls du sauber bleiben willst)
+    delete values.order_item_cascader;
+
+    return refineOnFinish(values);
+};
+
+    const { options, loading } = useOrderItemCascader();
 
     return (
         <>
         <Button onClick={() => createModalShow()} disabled={!(status === "draft" || status === "ordered")}>Neue Sonderposition</Button>
         <Modal {...createModalProps} title="Neue Sonderposition hinzufügen">
-            <Form {...createFormProps} layout="vertical">
+            <Form {...createFormProps} layout="vertical" onFinish={handleFinish}>
                 <Form.Item label="Bestellung ID" name="order_id" initialValue={orderId} hidden />
                 <Row gutter={24}>
                     <Col  span={12}>
@@ -153,9 +171,17 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
                 </Row>
                 <Row gutter={24}>
                     <Col  span={6}>
-                        <Form.Item label="AB-Referenz" name="order_confirmation_ref">
-                            <Input />
+                        <Form.Item label="Referenz" name="order_item_cascader">
+                            <Cascader 
+                                options={options} 
+                                loading={loading} 
+                                showSearch
+                                allowClear
+                                placeholder="Bestellung → Position"
+                            />
                         </Form.Item>
+                        <Form.Item name="fk_app_orders_id" hidden />
+                        <Form.Item name="fk_app_order_items_id" hidden />
                     </Col>
                     <Col  span={18}>
                         <Form.Item label="Dokumente" name="external_file_url">  
