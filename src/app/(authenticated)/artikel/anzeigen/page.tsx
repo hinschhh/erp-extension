@@ -478,7 +478,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
       ) : isError ? (
         <Typography.Text type="danger">Fehler beim Laden der Lagerdaten: {String(error)}</Typography.Text>
       ) : !inv ? (
-        <Typography.Text>Kein Lagerdatensatz gefunden.</Typography.Text>
+        <Typography.Text>Kein Lagerdatensatz gefunden...</Typography.Text>
       ) : (
         <Descriptions
           title={
