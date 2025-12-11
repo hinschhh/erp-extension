@@ -9,6 +9,7 @@ import routerProvider from "@refinedev/nextjs-router";
 import { ColorModeContextProvider } from "@contexts/color-mode";
 import { AntdRegistry } from "@ant-design/nextjs-registry";
 import "@refinedev/antd/dist/reset.css";
+import "@ant-design/v5-patch-for-react-19";
 
 import { dataProvider, liveProvider } from "@refinedev/supabase";
 import { authProviderClient } from "../providers/auth-provider/auth-provider.client";

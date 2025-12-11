@@ -10,10 +10,7 @@ type Product = Tables<"app_products">;
 
 type SelectProductProps = {
   value?: number | null;
-  onChange?: (value: number | null) => void;
-  /**
-   * Statische Filter, die IMMER angewendet werden (z.B. supplier).
-   */
+  onChangeAction?: (value: number | null) => void;
   filters?: Array<{
     field: string;
     operator:
@@ -28,18 +25,13 @@ type SelectProductProps = {
   }>;
 };
 
-export default function SelectProduct({ value, onChange, filters }: SelectProductProps) {
+export default function SelectProduct({ value, onChangeAction, filters }: SelectProductProps) {
   const { selectProps } = useSelect<Product>({
     resource: "app_products",
     optionLabel: "bb_sku",
-    optionValue: "id", // id ist number
+    optionValue: "id",
     sorters: [{ field: "bb_sku", order: "asc" }],
-
-    // kleine Seiten -> schnelle Antwort; mehr Treffer durch Suche
-    pagination: { current: 1, pageSize: 1000 },
-
-    // Eingabe entprellen, um Requests zu sparen
-    debounce: 300,
+    filters: [{ field: "bb_is_active", operator: "eq", value: true },{ field: "is_antique", operator: "eq", value: false },{ field: "bb_is_bom", operator: "eq", value: false },{ field: "is_variant_set", operator: "eq", value: false }, { field: "product_type", operator: "ne", value: "Service" }],
 
     // Falls du initial einen Wert hast, sicherstellen, dass dieser Wert geladen wird
     defaultValueQueryOptions: {
@@ -67,7 +59,7 @@ export default function SelectProduct({ value, onChange, filters }: SelectProduc
       placeholder="Produkt wählen"
       // controlled value
       value={value ?? undefined}
-      onChange={(v) => onChange?.(v ?? null)}
+      onChange={(v) => onChangeAction?.(v ?? null)}
     />
   );
 }

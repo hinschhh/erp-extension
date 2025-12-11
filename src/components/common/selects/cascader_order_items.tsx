@@ -14,7 +14,7 @@ const buildOptions = (
 ): CascaderProps["options"] => {
     if (!orders || !items) return [];
 
-    // Gruppieren der Items nach fk_app_orders_id
+    // Items nach Bestellung gruppieren
     const itemsByOrderId = new Map<number, OrderItem[]>();
 
     for (const item of items) {
@@ -26,58 +26,60 @@ const buildOptions = (
         itemsByOrderId.set(orderId, group);
     }
 
-    // Cascader-Struktur erzeugen
+    // Cascader-Struktur erzeugen (nur Daten, kein JSX in Arrays)
     return orders.map((order) => {
         const children: CascaderProps["options"] =
             (itemsByOrderId.get(order.id as number) ?? []).map((item) => {
-                // Nur relevante Attribute filtern
+                // relevante Attribute filtern
                 const filteredAttributes = Array.isArray(item.attributes)
                     ? item.attributes.filter(
                         (a) =>
                             a &&
                             typeof a === "object" &&
-                            ("bb_Name" in a) &&
-                            (a.bb_Name === "Grundmodell" || a.bb_Name === "Maße")
+                            "bb_Name" in a &&
+                            (a.bb_Name === "Grundmodell" || a.bb_Name === "Maße"),
                     )
                     : [];
 
+                // Subline als Text zusammenbauen
+                const attributesText =
+                    filteredAttributes.length > 0
+                        ? filteredAttributes
+                              .map((a) =>
+                                  typeof a === "object" &&
+                                  a !== null &&
+                                  "bb_Name" in a &&
+                                  "bb_Value" in a
+                                      ? `${a.bb_Name}: ${a.bb_Value}`
+                                      : "",
+                              )
+                              .filter(Boolean)
+                              .join(" · ")
+                        : "";
+
+                const mainLabel = `${item.bb_sku ?? ""}${
+                    item.bb_name ? ` – ${item.bb_name}` : ""
+                } (Menge: ${item.qty_ordered})`;
+
+                const fullLabel =
+                    attributesText.length > 0
+                        ? `${mainLabel} | ${attributesText}`
+                        : mainLabel;
+
                 return {
                     value: item.id,
-                    label: (
-                        <div>
-                            {/* Hauptzeile */}
-                            <Typography.Text ellipsis>
-                                {item.bb_sku ?? ""}{" "}
-                                {item.bb_name ? `– ${item.bb_name}` : ""}{" "}
-                                (Menge: {item.qty_ordered})
-                            </Typography.Text>
-
-                            {/* Subline – nur anzeigen, wenn es passende Attribute gibt */}
-                            {filteredAttributes.length > 0 && (
-                                <div style={{ fontSize: "12px", color: "#888" }}>
-                                    {filteredAttributes
-                                        .map((a) => 
-                                            typeof a === "object" && a !== null && "bb_Name" in a && "bb_Value" in a
-                                                ? `${a.bb_Name}: ${a.bb_Value}`
-                                                : ""
-                                        )
-                                        .join(" · ")}
-                                </div>
-                            )}
-                        </div>
-                    ),
+                    label: fullLabel, // ⬅️ nur noch string
                 };
             });
 
-
-
         return {
             value: order.id, // Ebene 1: Order-ID
-            label: `${order["bb_import_ab-nummer"] ?? ""} - (${order.customer_name ?? ""})`,
+            label: `${order.bb_OrderNumber ?? ""} - (${order.customer_name ?? ""})`,
             children,
         };
     });
 };
+
 
 /**
  * refine-Hook: Liefert Cascader Options + Loading-State

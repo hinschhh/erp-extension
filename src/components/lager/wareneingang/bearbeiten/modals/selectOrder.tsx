@@ -107,6 +107,7 @@ export default function SelectPOOrderModal({ inboundShipmentId, inboundShipmentS
   const orderIdVal: string | null = orderId ?? null;
 
   // OPTIONAL: Beim Laden einer Bestellung alle offenen Positionen automatisch vorselektieren
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!orderIdVal) {
       setSelectedNormalIds([]);
@@ -115,7 +116,6 @@ export default function SelectPOOrderModal({ inboundShipmentId, inboundShipmentS
     const rows = (tablePropsNormal?.dataSource as any[] | undefined) ?? [];
     const ids = rows.map((r) => String(r.id));
     setSelectedNormalIds(ids);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderIdVal, tablePropsNormal?.dataSource]);
 
   useEffect(() => {
@@ -126,8 +126,8 @@ export default function SelectPOOrderModal({ inboundShipmentId, inboundShipmentS
     const rows = (tablePropsSpecial?.dataSource as any[] | undefined) ?? [];
     const ids = rows.map((r) => String(r.id));
     setSelectedSpecialIds(ids);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderIdVal, tablePropsSpecial?.dataSource]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleSave = async () => {
     const supabase = supabaseBrowserClient;

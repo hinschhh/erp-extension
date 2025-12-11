@@ -68,12 +68,14 @@ const UsedInImageCell: React.FC<{ id: number; alt?: string; size?: number }> = (
 }) => {
   const { data } = useSWR<{ imageUrl?: string }>(`/api/billbee/products/get/${id}`, fetcher);
   if (!data?.imageUrl) return <>—</>;
-  // eslint-disable-next-line @next/next/no-img-element
   return (
-    <img
+    <Image
       src={data.imageUrl}
       alt={alt ?? "Bild"}
-      style={{ width: size, height: size, objectFit: "cover", borderRadius: 6 }}
+      width={size}
+      height={size}
+      style={{ objectFit: "cover", borderRadius: 6 }}
+      unoptimized
     />
   );
 };

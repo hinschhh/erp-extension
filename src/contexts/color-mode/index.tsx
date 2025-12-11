@@ -30,12 +30,14 @@ export const ColorModeContextProvider: React.FC<
   const [mode, setMode] = useState(defaultMode || "light");
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMounted(true);
   }, []);
 
   useEffect(() => {
     if (isMounted) {
       const theme = Cookies.get("theme") || "light";
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMode(theme);
     }
   }, [isMounted]);

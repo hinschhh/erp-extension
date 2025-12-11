@@ -20,6 +20,7 @@ import {
   Divider,
   theme,
 } from "antd";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowUpOutlined,
@@ -269,7 +270,13 @@ const percent = (v: number) => new Intl.NumberFormat("de-DE", { style: "percent"
 
 const CustomTitle = ({ collapsed }: { collapsed: boolean }) => (
   <Link href="/">
-    <span>{collapsed ? <img src="/LL_500x500.png" alt="L&L" width="60px" /> : <img src="/L&L_Logo_1200_x_200.jpg" alt="Land & Liebe" width="160px" />}</span>
+    <span>
+      {collapsed ? (
+        <Image src="/LL_500x500.png" alt="L&L" width={60} height={60} />
+      ) : (
+        <Image src="/L&L_Logo_1200_x_200.jpg" alt="Land & Liebe" width={160} height={27} />
+      )}
+    </span>
   </Link>
 );
 

@@ -48,11 +48,11 @@ export default function InboundItems({ inboundShipmentId, inboundShipmentStatus,
 
   // Wenn Tabellen-Daten da sind: offene Mengen der zugehörigen PO-Positionen aus der View holen
   useEffect(() => {
-    const loadQtyOpen = async () => {
-      const supabase = supabaseBrowserClient;
-      const rows = (tableProps?.dataSource as InboundItems[] | undefined) ?? [];
-      const ids = Array.from(
-        new Set(
+      const loadQtyOpen = async () => {
+        const supabase = supabaseBrowserClient;
+        const rows = (tableProps?.dataSource as InboundItems[] | undefined) ?? [];
+        const ids = Array.from(
+          new Set(
           rows
             .map((r) => r.po_item_normal_id)
             .filter((x): x is string => Boolean(x))
@@ -83,7 +83,6 @@ export default function InboundItems({ inboundShipmentId, inboundShipmentStatus,
     };
 
     loadQtyOpen();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tableProps?.dataSource]);
 
   // Hilfsfunktion: Maximal zulässige Menge = ursprünglicher Wert + aktuell offene Menge

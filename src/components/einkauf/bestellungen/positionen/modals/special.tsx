@@ -124,12 +124,12 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
                 <Form.Item label="Bestellung ID" name="order_id" initialValue={orderId} hidden />
                 <Row gutter={24}>
                     <Col  span={12}>
-                    <Form.Item label="Sonderbestellung" name="billbee_product_id">
+                    <Form.Item label="Sonderbestellung" name="billbee_product_id" required>
                         <Select {...selectPropsSpecial} />
                     </Form.Item>
                     </Col>
                     <Col  span={12}>
-                        <Form.Item label="Grundmodell" style={{ marginBottom: 0 }}>
+                        <Form.Item label="Grundmodell" style={{ marginBottom: 0 }} required>
                             <Flex gap="8px" align="end">
                                 <Form.Item
                                 name="base_model_billbee_product_id"
@@ -144,7 +144,7 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
                 </Row>
                 <Row gutter={24}>
                     <Col  span={12}>
-                        <Form.Item label="Ext. SKU" name="supplier_sku">
+                        <Form.Item label="Ext. SKU" name="supplier_sku" required>
                             <Input />
                         </Form.Item>
                         <Form.Item name="sketch_needed" valuePropName="checked" initialValue={true}>
@@ -159,19 +159,19 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
                 </Row>
                 <Row gutter={24}>
                     <Col  span={12}>
-                        <Form.Item label="Menge" name="qty_ordered">
+                        <Form.Item label="Menge" name="qty_ordered" required>
                             <Input type="number" />
                         </Form.Item>
                     </Col>
                     <Col  span={12}>
-                        <Form.Item label="Preis" name="unit_price_net">
+                        <Form.Item label="Preis" name="unit_price_net" required>
                             <Input type="number" />
                         </Form.Item>
                     </Col>
                 </Row>
                 <Row gutter={24}>
                     <Col  span={6}>
-                        <Form.Item label="Referenz" name="order_item_cascader">
+                        <Form.Item label="Referenz" name="order_item_cascader" required>
                             <Cascader 
                                 options={options} 
                                 loading={loading} 
