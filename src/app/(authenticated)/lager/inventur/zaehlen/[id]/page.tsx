@@ -13,10 +13,12 @@ import { useGetIdentity } from "@refinedev/core";
 type stocks = Tables<"app_stocks">
 type stock_locations = Tables<"app_stock_locations">
 type counts = Tables<"app_inventory_counts">
+type products = Tables<"app_products">
 
 export default function InventurZaehlenPage() {
     const params = useParams() as { id: string };
-    const sessionId = params?.id;
+    const sessionId = Number(params?.id);
+
 
     const { data: identity } = useGetIdentity<{ id: string }>();
 
@@ -49,17 +51,17 @@ export default function InventurZaehlenPage() {
         allValues: any, // hier TS ruhig etwas locker sehen, wir nutzen nur ein paar Felder
     ) => {
         // Wir reagieren nur, wenn eine der relevanten Auswahl-Felder sich ändert
-        const relevantKeys = ["fk_stocks", "region", "fk_products"] as const;
+        const relevantKeys = ["fk_stocks", "stock_location", "fk_products"] as const;
         const changedKey = Object.keys(changedValues)[0] as keyof counts | undefined;
 
         if (!changedKey || !relevantKeys.includes(changedKey as any)) {
             return;
         }
 
-        const { fk_stocks, region, fk_products } = allValues;
+        const { fk_stocks, stock_location, fk_products } = allValues;
 
         // Wenn noch nicht alle drei Werte gesetzt sind → Hinweis zurücksetzen
-        if (!fk_stocks || !region || !fk_products) {
+        if (!fk_stocks || !stock_location || !fk_products) {
             setExistingCount(null);
             return;
         }
@@ -82,9 +84,9 @@ export default function InventurZaehlenPage() {
                         value: fk_stocks,
                     },
                     {
-                        field: "region", // 🟡 ggf. fk_stock_locations o. ä.
+                        field: "stock_location", // 🟡 ggf. fk_stock_locations o. ä.
                         operator: "eq",
-                        value: region,
+                        value: stock_location,
                     },
                     {
                         field: "fk_products",
@@ -116,6 +118,15 @@ export default function InventurZaehlenPage() {
         resource: "app_stock_locations",
         optionLabel: "name",
         optionValue: "id",
+    });
+
+    const {selectProps: productsSelectProps} = useSelect<products>({
+        resource: "app_products",
+        optionLabel: "bb_sku",
+        optionValue: "id",
+        sorters: [{ field: "bb_sku", order: "asc" }],
+    filters: [{ field: "bb_is_active", operator: "eq", value: true },{ field: "is_antique", operator: "eq", value: false },{ field: "bb_is_bom", operator: "eq", value: false },{ field: "is_variant_set", operator: "eq", value: false }, { field: "product_type", operator: "ne", value: "Service" }],
+
     });
 
 
@@ -159,7 +170,7 @@ export default function InventurZaehlenPage() {
                     </Col>
                     <Col xs={24} sm={24} md={24}>
                         <Form.Item label="Produkt" name="fk_products" style={{width: "100%"}}>
-                            <SelectProduct />
+                            <Select {...productsSelectProps} style={{ width: "100%" }} placeholder="Produkt wählen" />
                         </ Form.Item>
                         {isChecking && (
                 <Typography.Text type="secondary">
@@ -206,7 +217,7 @@ export default function InventurZaehlenPage() {
                     </Col>
                     <Col xs={24} sm={24} md={24}>
                         <Form.Item>
-                            <SaveButton  style={{ width: "100%" }} type="primary" htmlType="submit">Hinzufügen</SaveButton>
+                            <SaveButton {...saveButtonProps} style={{ width: "100%" }} >Hinzufügen</SaveButton>
                         </Form.Item>
                     </Col>
                 </Row>
