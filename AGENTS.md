@@ -21,6 +21,61 @@
 - Keep UI consistent with Ant Design patterns; reuse shared components before adding new ones.
 - Organize side effects and API calls in providers/utils rather than components.
 
+## Refine.dev Framework Patterns (MANDATORY)
+**This project uses Refine.dev** - always follow these patterns for consistency and proper framework integration:
+
+### Data Fetching & Mutations
+- ✅ **Use Refine hooks**: `useForm`, `useTable`, `useSelect`, `useOne`, `useList`
+- ✅ **Custom mutations**: Use `useCustomMutation()` instead of raw `fetch()` calls
+- ✅ **Cache invalidation**: Use `useInvalidate()` instead of manual `refetch()`
+- ❌ **Avoid**: Direct `fetch()` or axios calls in components (use for API routes only)
+
+### Notifications
+- ✅ Use Refine's built-in notification system via `successNotification` / `errorNotification`
+- ❌ Avoid Ant Design's `message.success()` / `message.error()` directly in mutations
+
+### Example: Custom File Upload
+```typescript
+const invalidate = useInvalidate();
+const { mutate: uploadFile } = useCustomMutation();
+
+const handleUpload = (file: File, fieldName: string) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  
+  uploadFile(
+    {
+      url: "/api/custom-endpoint",
+      method: "post",
+      values: formData,
+      successNotification: {
+        message: "Upload erfolgreich",
+        type: "success",
+      },
+      errorNotification: {
+        message: "Upload fehlgeschlagen",
+        type: "error",
+      },
+    },
+    {
+      onSuccess: (data) => {
+        // Update form and invalidate cache
+        form?.setFieldValue(fieldName, data.data.fileUrl);
+        invalidate({
+          resource: "resource_name",
+          invalidates: ["detail"],
+          id: recordId,
+        });
+      },
+    }
+  );
+};
+```
+
+### Resource Names
+- Match Supabase table/view names exactly (e.g., `app_purchase_orders`, `app_inbound_shipments`)
+- Use views for read-only data, tables for mutations
+
 ## Testing Guidelines
 - No automated test suite is defined yet; prioritize high-impact manual checks (auth flows, data mutations, critical edge functions).
 - When adding tests, prefer integration-level coverage near pages/API routes; mirror file paths in a parallel `__tests__` or `tests` directory.

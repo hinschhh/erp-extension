@@ -2,14 +2,14 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useOne } from "@refinedev/core";
+import { useCustomMutation, useInvalidate } from "@refinedev/core";
 import {
   useForm,
   Edit,
   RefreshButton,
   ListButton,
 } from "@refinedev/antd";
-import { Button, Card, Checkbox, Col, DatePicker, Form, Input, InputNumber, Row, Tabs, TabsProps, message, Upload, Modal } from "antd";
+import { Button, Card, Checkbox, Col, DatePicker, Form, Input, InputNumber, Row, Tabs, TabsProps, Upload, Modal, message } from "antd";
 import type { UploadProps } from "antd";
 import { UploadOutlined, DeleteOutlined, EyeOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -42,65 +42,63 @@ export default function EinkaufsBestellungenBearbeiten() {
     redirect: false,
   });
 
+  const invalidate = useInvalidate();
+
+  const { mutate: uploadFile } = useCustomMutation();
+  const { mutate: deleteFile } = useCustomMutation();
+
   const handleUpload = async (file: File, fieldName: string, prefix: string, setLoading: (loading: boolean) => void) => {
     setLoading(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("subfolder", `Einkauf/Bestellungen/${formPropsHeader?.initialValues?.order_number || "temp"}`);
-      formData.append("prefix", prefix);
+    
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("subfolder", `Einkauf/Bestellungen/${formPropsHeader?.initialValues?.order_number || "temp"}`);
+    formData.append("prefix", prefix);
 
-      const response = await fetch("/api/sharepoint/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const contentType = response.headers.get("content-type");
-        let errorData;
-        if (contentType?.includes("application/json")) {
-          errorData = await response.json();
-        } else {
-          const text = await response.text();
-          errorData = { error: text || "Upload fehlgeschlagen" };
-        }
-        throw new Error(errorData.error || "Upload fehlgeschlagen");
-      }
-
-      const result = await response.json();
-      
-      formPropsHeader.form?.setFieldValue(fieldName, result.fileUrl);
-      
-      const recordId = formPropsHeader?.initialValues?.id;
-      if (recordId) {
-        try {
-          const { supabaseBrowserClient } = await import("@/utils/supabase/client");
+    uploadFile(
+      {
+        url: "/api/sharepoint/upload",
+        method: "post",
+        values: formData,
+        successNotification: (data) => ({
+          message: `${file.name} erfolgreich hochgeladen`,
+          type: "success",
+        }),
+        errorNotification: (error) => ({
+          message: "Upload fehlgeschlagen",
+          description: error?.message || "Unbekannter Fehler",
+          type: "error",
+        }),
+      },
+      {
+        onSuccess: async (data) => {
+          // Update form field with file URL
+          formPropsHeader.form?.setFieldValue(fieldName, data.data.fileUrl);
           
-          const { error: dbError } = await supabaseBrowserClient
-            .from("app_purchase_orders")
-            .update({ [fieldName]: result.fileUrl })
-            .eq("id", recordId);
-          
-          if (dbError) {
-            console.error("Database update error:", dbError);
-            message.warning("Datei hochgeladen, aber DB-Update fehlgeschlagen");
-          } else {
-            message.success(`${file.name} erfolgreich hochgeladen und gespeichert`);
-            queryResult?.refetch();
+          // Update database via Supabase
+          const recordId = formPropsHeader?.initialValues?.id;
+          if (recordId) {
+            const { supabaseBrowserClient } = await import("@/utils/supabase/client");
+            
+            await supabaseBrowserClient
+              .from("app_purchase_orders")
+              .update({ [fieldName]: data.data.fileUrl })
+              .eq("id", recordId);
+            
+            // Invalidate cache to refresh data
+            invalidate({
+              resource: "app_purchase_orders",
+              invalidates: ["detail"],
+              id: recordId,
+            });
           }
-        } catch (dbError) {
-          console.error("Database update error:", dbError);
-          message.warning("Datei hochgeladen, aber DB-Update fehlgeschlagen");
-        }
-      } else {
-        message.success(`${file.name} erfolgreich hochgeladen`);
+          setLoading(false);
+        },
+        onError: () => {
+          setLoading(false);
+        },
       }
-    } catch (error) {
-      console.error("Upload error:", error);
-      message.error("Fehler beim Hochladen der Datei");
-    } finally {
-      setLoading(false);
-    }
+    );
     
     return false;
   };
@@ -113,43 +111,45 @@ export default function EinkaufsBestellungenBearbeiten() {
       okType: 'danger',
       cancelText: 'Abbrechen',
       onOk: async () => {
-        try {
-          const recordId = formPropsHeader?.initialValues?.id;
-          const subfolder = `Einkauf/Bestellungen/${formPropsHeader?.initialValues?.order_number || ""}`;
-          
-          const response = await fetch("/api/sharepoint/delete", {
-            method: "DELETE",
-            headers: {
-              "Content-Type": "application/json",
+        const recordId = formPropsHeader?.initialValues?.id;
+        const subfolder = `Einkauf/Bestellungen/${formPropsHeader?.initialValues?.order_number || ""}`;
+        
+        deleteFile(
+          {
+            url: "/api/sharepoint/delete",
+            method: "delete",
+            values: { fileName, subfolder },
+            successNotification: {
+              message: "Datei erfolgreich gelöscht",
+              type: "success",
             },
-            body: JSON.stringify({ fileName, subfolder }),
-          });
-
-          if (!response.ok) {
-            throw new Error("Löschen fehlgeschlagen");
+            errorNotification: {
+              message: "Löschen fehlgeschlagen",
+              type: "error",
+            },
+          },
+          {
+            onSuccess: async () => {
+              // Update database
+              if (recordId) {
+                const { supabaseBrowserClient } = await import("@/utils/supabase/client");
+                
+                await supabaseBrowserClient
+                  .from("app_purchase_orders")
+                  .update({ [fieldName]: null })
+                  .eq("id", recordId);
+                
+                // Update form and invalidate cache
+                formPropsHeader.form?.setFieldValue(fieldName, null);
+                invalidate({
+                  resource: "app_purchase_orders",
+                  invalidates: ["detail"],
+                  id: recordId,
+                });
+              }
+            },
           }
-
-          if (recordId) {
-            const { supabaseBrowserClient } = await import("@/utils/supabase/client");
-            
-            const { error: dbError } = await supabaseBrowserClient
-              .from("app_purchase_orders")
-              .update({ [fieldName]: null })
-              .eq("id", recordId);
-            
-            if (dbError) {
-              console.error("Database update error:", dbError);
-              message.warning("Datei gelöscht, aber DB-Update fehlgeschlagen");
-            } else {
-              message.success("Datei erfolgreich gelöscht");
-              formPropsHeader.form?.setFieldValue(fieldName, null);
-              queryResult?.refetch();
-            }
-          }
-        } catch (error) {
-          console.error("Delete error:", error);
-          message.error("Fehler beim Löschen der Datei");
-        }
+        );
       },
     });
   };

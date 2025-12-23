@@ -1,7 +1,8 @@
 "use client";
 
 import { Edit, useForm, useSelect, ListButton, RefreshButton } from "@refinedev/antd";
-import { Button, Col, DatePicker, Form, Input, InputNumber, Row, Select, TreeSelect, Upload, message, Modal } from "antd";
+import { useCustomMutation, useInvalidate } from "@refinedev/core";
+import { Button, Col, DatePicker, Form, Input, InputNumber, Row, Select, TreeSelect, Upload, Modal } from "antd";
 import type { UploadProps } from "antd";
 import { LoginOutlined, UploadOutlined, DeleteOutlined, EyeOutlined } from "@ant-design/icons";
 import { useState } from "react";
@@ -27,78 +28,63 @@ export default function InboundShipmentCreatePage() {
     redirect: false,
   });
 
+  const invalidate = useInvalidate();
+
+  const { mutate: uploadFile } = useCustomMutation();
+  const { mutate: deleteFile } = useCustomMutation();
+
   const handleUpload = async (file: File, fieldName: string, prefix: string, setLoading: (loading: boolean) => void) => {
     setLoading(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("subfolder", `Lager/Wareneingang/${formProps?.initialValues?.inbound_number || "temp"}`);
-      formData.append("prefix", prefix);
+    
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("subfolder", `Lager/Wareneingang/${formProps?.initialValues?.inbound_number || "temp"}`);
+    formData.append("prefix", prefix);
 
-      console.log("Uploading file:", file.name, "to /api/sharepoint/upload");
-
-      const response = await fetch("/api/sharepoint/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      console.log("Response status:", response.status);
-      console.log("Response ok:", response.ok);
-
-      if (!response.ok) {
-        const contentType = response.headers.get("content-type");
-        console.log("Response content-type:", contentType);
-        
-        let errorData;
-        if (contentType?.includes("application/json")) {
-          errorData = await response.json();
-        } else {
-          const text = await response.text();
-          console.error("Response text:", text);
-          errorData = { error: text || "Upload fehlgeschlagen" };
-        }
-        
-        console.error("Upload error details:", errorData);
-        throw new Error(errorData.error || "Upload fehlgeschlagen");
-      }
-
-      const result = await response.json();
-      
-      // Update form field with file URL
-      form?.setFieldValue(fieldName, result.fileUrl);
-      
-      // Update database
-      const recordId = formProps?.initialValues?.id;
-      if (recordId) {
-        try {
-          const { supabaseBrowserClient } = await import("@/utils/supabase/client");
+    uploadFile(
+      {
+        url: "/api/sharepoint/upload",
+        method: "post",
+        values: formData,
+        successNotification: (data) => ({
+          message: `${file.name} erfolgreich hochgeladen`,
+          type: "success",
+        }),
+        errorNotification: (error) => ({
+          message: "Upload fehlgeschlagen",
+          description: error?.message || "Unbekannter Fehler",
+          type: "error",
+        }),
+      },
+      {
+        onSuccess: async (data) => {
+          // Update form field with file URL
+          form?.setFieldValue(fieldName, data.data.fileUrl);
           
-          const { error: dbError } = await supabaseBrowserClient
-            .from("app_inbound_shipments")
-            .update({ [fieldName]: result.fileUrl })
-            .eq("id", recordId);
-          
-          if (dbError) {
-            console.error("Database update error:", dbError);
-            message.warning("Datei hochgeladen, aber DB-Update fehlgeschlagen");
-          } else {
-            message.success(`${file.name} erfolgreich hochgeladen und gespeichert`);
-            // Reload data to update UI
-            queryResult?.refetch();
+          // Update database via Supabase
+          const recordId = formProps?.initialValues?.id;
+          if (recordId) {
+            const { supabaseBrowserClient } = await import("@/utils/supabase/client");
+            
+            await supabaseBrowserClient
+              .from("app_inbound_shipments")
+              .update({ [fieldName]: data.data.fileUrl })
+              .eq("id", recordId);
+            
+            // Invalidate cache to refresh data
+            invalidate({
+              resource: "app_inbound_shipments",
+              invalidates: ["detail"],
+              id: recordId,
+            });
           }
-        } catch (dbError) {
-          console.error("Database update error:", dbError);
-          message.warning("Datei hochgeladen, aber DB-Update fehlgeschlagen");
-        }
-      } else {
-        message.success(`${file.name} erfolgreich hochgeladen`);
+          setLoading(false);
+        },
+        onError: () => {
+          setLoading(false);
+        },
       }
-    } catch (error) {
-      console.error("Upload error:", error);
-      message.error("Fehler beim Hochladen der Datei");
-    } finally {
-      setLoading(false);
-    }
+    );
     
     return false; // Prevent default upload behavior
   };
@@ -111,45 +97,45 @@ export default function InboundShipmentCreatePage() {
       okType: 'danger',
       cancelText: 'Abbrechen',
       onOk: async () => {
-        try {
-          const recordId = formProps?.initialValues?.id;
-          const subfolder = `Lager/Wareneingang/${formProps?.initialValues?.inbound_number || ""}`;
-          
-          // Delete from SharePoint
-          const response = await fetch("/api/sharepoint/delete", {
-            method: "DELETE",
-            headers: {
-              "Content-Type": "application/json",
+        const recordId = formProps?.initialValues?.id;
+        const subfolder = `Lager/Wareneingang/${formProps?.initialValues?.inbound_number || ""}`;
+        
+        deleteFile(
+          {
+            url: "/api/sharepoint/delete",
+            method: "delete",
+            values: { fileName, subfolder },
+            successNotification: {
+              message: "Datei erfolgreich gelöscht",
+              type: "success",
             },
-            body: JSON.stringify({ fileName, subfolder }),
-          });
-
-          if (!response.ok) {
-            throw new Error("Löschen fehlgeschlagen");
+            errorNotification: {
+              message: "Löschen fehlgeschlagen",
+              type: "error",
+            },
+          },
+          {
+            onSuccess: async () => {
+              // Update database
+              if (recordId) {
+                const { supabaseBrowserClient } = await import("@/utils/supabase/client");
+                
+                await supabaseBrowserClient
+                  .from("app_inbound_shipments")
+                  .update({ [fieldName]: null })
+                  .eq("id", recordId);
+                
+                // Update form and invalidate cache
+                form?.setFieldValue(fieldName, null);
+                invalidate({
+                  resource: "app_inbound_shipments",
+                  invalidates: ["detail"],
+                  id: recordId,
+                });
+              }
+            },
           }
-
-          // Update database
-          if (recordId) {
-            const { supabaseBrowserClient } = await import("@/utils/supabase/client");
-            
-            const { error: dbError } = await supabaseBrowserClient
-              .from("app_inbound_shipments")
-              .update({ [fieldName]: null })
-              .eq("id", recordId);
-            
-            if (dbError) {
-              console.error("Database update error:", dbError);
-              message.warning("Datei gelöscht, aber DB-Update fehlgeschlagen");
-            } else {
-              message.success("Datei erfolgreich gelöscht");
-              form?.setFieldValue(fieldName, null);
-              queryResult?.refetch();
-            }
-          }
-        } catch (error) {
-          console.error("Delete error:", error);
-          message.error("Fehler beim Löschen der Datei");
-        }
+        );
       },
     });
   };
