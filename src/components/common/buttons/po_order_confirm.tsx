@@ -28,11 +28,11 @@ export default function OrderStatusActionButton({ orderId, onSuccess }: Props) {
   const { data, isLoading, refetch } = useOne<PurchaseOrder>({
     resource: "app_purchase_orders",
     id: orderId,
-    meta: { select: "id,status,proforma_confirmed_at,supplier" },
+    meta: { select: "id,status,confirmed_at,supplier" },
   });
 
   const status = data?.data?.status;
-  const confirmedAt = data?.data?.proforma_confirmed_at;
+  const confirmedAt = data?.data?.confirmed_at;
   const supplier = data?.data?.supplier; // für Metadaten beim Upload
 
   /** Speichert DoL und setzt Status über RPC. Upload wird vor dem RPC erledigt. */

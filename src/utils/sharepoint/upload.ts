@@ -107,7 +107,7 @@ export async function uploadToSharePoint(
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/octet-stream",
       },
-      body: file,
+      body: file as any,
     });
 
     console.log("Upload response status:", uploadResponse.status);
