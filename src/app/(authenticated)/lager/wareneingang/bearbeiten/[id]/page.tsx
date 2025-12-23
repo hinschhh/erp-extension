@@ -32,7 +32,7 @@ export default function InboundShipmentCreatePage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("subfolder", `Lager/Wareneingang/${formPropsHeader?.initialValues?.inbound_number || "temp"}`);
+      formData.append("subfolder", `Lager/Wareneingang/${formProps?.initialValues?.inbound_number || "temp"}`);
       formData.append("prefix", prefix);
 
       console.log("Uploading file:", file.name, "to /api/sharepoint/upload");
