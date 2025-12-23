@@ -33,7 +33,7 @@ return (
       dataIndex="arrived_at"
       sorter
       render={(_, record: InboundShipment) => (
-        <DateField value={record.arrived_at} format="DD.MM.YYYY" />
+        <DateField value={record.delivered_at} format="DD.MM.YYYY" />
       )}
     />
     <Table.Column title="Lieferant" dataIndex="fk_bb_supplier" sorter />
@@ -42,7 +42,7 @@ return (
       <ISStatusTag status={record.status} />
     )}
     />
-    <Table.Column title="Lieferscheinnummer" dataIndex="delivery_note_no" sorter />
+    <Table.Column title="Lieferscheinnummer" dataIndex="delivery_note_number" sorter />
     <Table.Column
       title="Rechnung(en)"
       render={(_, record) => {

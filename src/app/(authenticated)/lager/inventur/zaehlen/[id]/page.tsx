@@ -126,7 +126,6 @@ export default function InventurZaehlenPage() {
         optionValue: "id",
         sorters: [{ field: "bb_sku", order: "asc" }],
     filters: [{ field: "bb_is_active", operator: "eq", value: true },{ field: "is_antique", operator: "eq", value: false },{ field: "bb_is_bom", operator: "eq", value: false },{ field: "is_variant_set", operator: "eq", value: false }, { field: "product_type", operator: "ne", value: "Service" }],
-
     });
 
 

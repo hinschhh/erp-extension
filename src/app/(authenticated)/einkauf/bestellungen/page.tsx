@@ -6,6 +6,7 @@ import { Tables } from "@/types/supabase";
 import { PoStatusTag, statusMap } from "@/components/common/tags/states/po";
 import { ColumnFilterOption, ColumnMultiSelectFilter } from "@components/common/table/ColumnMultiSelectFilter";
 import { formatCurrencyEUR } from "@utils/formats";
+import dayjs from "dayjs";
 
 type Po = Tables<"app_purchase_orders">;
 type Supplier = Tables<"app_suppliers">;
@@ -84,7 +85,21 @@ export default function EinkaufsBestellungenÜbersicht() {
             )}
             render={(value) => <PoStatusTag status={value} />} sorter 
           />
-          <Table.Column title="Rechnungsnummer" dataIndex="invoice_number" sorter 
+          <Table.Column title="Bestellbestätigung" dataIndex="confirmation_number" sorter render={(value, record) => {
+            return value ? 
+              <Space direction="vertical" size={0}>
+                <Typography.Text strong>{value}</Typography.Text>
+                <Typography.Text type="secondary">{record?.confirmation_date ? dayjs(record.confirmation_date).format("DD.MM.YYYY") : "—"}</Typography.Text>
+              </Space> : "-";            
+          }} 
+          />
+          <Table.Column title="Rechnungsnummer" dataIndex="invoice_number" sorter render={(value, record) => {
+            return value ? 
+              <Space direction="vertical" size={0}>
+                <Typography.Text strong>{value}</Typography.Text>
+                <Typography.Text type="secondary">{record?.invoice_date ? dayjs(record.invoice_date).format("DD.MM.YYYY") : "—"}</Typography.Text>
+              </Space> : "-";            
+          }}
           />
           <Table.Column title="Summe" dataIndex="total_amount_net" sorter render={(value, _) => formatCurrencyEUR(value)}/>
           <Table.Column title="Unbestätigte Skizzen" dataIndex="sketch_unconfirmed_cnt" sorter render={(value, _) => {
