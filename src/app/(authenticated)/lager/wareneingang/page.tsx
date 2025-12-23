@@ -33,7 +33,7 @@ return (
       dataIndex="arrived_at"
       sorter
       render={(_, record: InboundShipment) => (
-        <DateField value={record.delivered_at} format="DD.MM.YYYY" />
+        <DateField value={record.arrived_at} format="DD.MM.YYYY" />
       )}
     />
     <Table.Column title="Lieferant" dataIndex="fk_bb_supplier" sorter />

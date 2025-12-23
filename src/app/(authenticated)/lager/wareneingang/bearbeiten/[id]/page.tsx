@@ -197,7 +197,7 @@ export default function InboundShipmentCreatePage() {
             </Form.Item>
           </Col>
           <Col span={8}>
-            <Form.Item name="delivered_at" label="Wareneingangsdatum" getValueProps={(v) => ({ value: v ? dayjs(v) : null })} required>
+            <Form.Item name="arrived_at" label="Wareneingangsdatum" getValueProps={(v) => ({ value: v ? dayjs(v) : null })} required>
               <DatePicker style={{ width: "100%" }} placeholder="Datum wählen..." format="DD.MM.YYYY"/>
             </Form.Item>
           </Col>
