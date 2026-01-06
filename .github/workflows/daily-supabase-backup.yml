@@ -1,4 +1,4 @@
-name: Monthly Supabase Backup
+name: Daily Supabase Backup
 
 on:
   schedule:
