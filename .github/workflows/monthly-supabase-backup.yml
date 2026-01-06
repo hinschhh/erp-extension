@@ -28,6 +28,8 @@ jobs:
             -U "${{ secrets.SUPABASE_DB_USER }}" \
             -d "${{ secrets.SUPABASE_DB_NAME }}" \
             -F c \
+            --no-owner \
+            --no-acl \
             -f "$FILE"
 
           echo "BACKUP_FILE=$FILE" >> $GITHUB_ENV
