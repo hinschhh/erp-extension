@@ -1,6 +1,6 @@
 "use client";
 
-import { List, useTable, EditButton, DeleteButton, useSelect, CreateButton } from "@refinedev/antd";  // oder Create, Edit, Show
+import { List, useTable, EditButton, DeleteButton, useSelect, CreateButton, ShowButton } from "@refinedev/antd";  // oder Create, Edit, Show
 import { Table, Space, Input, Typography } from "antd";
 import { Tables } from "@/types/supabase";
 import { PoStatusTag, statusMap } from "@/components/common/tags/states/po";
@@ -111,6 +111,7 @@ export default function EinkaufsBestellungenÜbersicht() {
           <Table.Column title="Anmerkungen" dataIndex="notes" render={(value) => <Typography.Paragraph ellipsis={{ rows: 5, expandable: true, symbol: 'mehr' }}>{value}</Typography.Paragraph>  } />
           <Table.Column title="Aktionen" dataIndex="actions" render={(_, record) => (
             <Space>
+              <ShowButton resource="app_purchase_orders" hideText size="small" recordItemId={record.order_id} />
               <EditButton resource="app_purchase_orders" hideText size="small" recordItemId={record.order_id} />
               <DeleteButton resource="app_purchase_orders" hideText size="small" recordItemId={record.order_id} disabled={!(record.status === "draft" || record.status === "ordered")} />
             </Space>

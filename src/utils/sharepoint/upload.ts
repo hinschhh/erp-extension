@@ -137,11 +137,7 @@ export async function uploadToSharePoint(
 /**
  * Delete file from SharePoint
  */
-export async function deleteFromSharePoint(
-  fileName: string,
-  subfolder: string = "",
-  basePath: string = ""
-): Promise<boolean> {
+export async function deleteFromSharePoint(fileUrl: string): Promise<boolean> {
   try {
     const config: SharePointConfig = {
       tenantId: process.env.SHAREPOINT_TENANT_ID || "",
@@ -154,26 +150,24 @@ export async function deleteFromSharePoint(
 
     const accessToken = await getAccessToken(config);
 
-    // Construct the folder path - use basePath if provided, otherwise use config.folderPath
-    const rootPath = basePath || config.folderPath;
-    const fullPath = subfolder 
-      ? `${rootPath}/${subfolder}/${fileName}`
-      : `${rootPath}/${fileName}`;
+    const u = new URL(fileUrl);
+    const pathname = decodeURIComponent(u.pathname);
 
-    console.log("Delete full path:", fullPath);
+    const marker = "/Freigegebene Dokumente/";
+    const idx = pathname.indexOf(marker);
+    if (idx === -1) {
+      console.error("Marker not found in path:", pathname);
+      return false;
+    }
 
-    const deleteUrl = `https://graph.microsoft.com/v1.0/sites/${config.siteId}/drives/${config.driveId}/root:/${fullPath}`;
+    const drivePath = pathname.slice(idx + marker.length); // "00 Web-App/Einkauf/Bestellungen/xyz.pdf"
 
-    console.log("Delete URL:", deleteUrl);
+    const deleteUrl = `https://graph.microsoft.com/v1.0/sites/${config.siteId}/drives/${config.driveId}/root:/${encodeURI(drivePath)}:`;
 
     const deleteResponse = await fetch(deleteUrl, {
       method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
-
-    console.log("Delete response status:", deleteResponse.status);
 
     if (!deleteResponse.ok) {
       const errorText = await deleteResponse.text();
@@ -186,3 +180,4 @@ export async function deleteFromSharePoint(
     return false;
   }
 }
+

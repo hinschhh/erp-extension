@@ -65,8 +65,8 @@ export const statusMap: Record<
 export function PoStatusTag({ status }: { status: string }) {
   const statusInfo = statusMap[status];
   return (
-    <Tag color={statusInfo.color} icon={statusInfo.icon}>
-      {statusInfo.label}
+    <Tag color={statusInfo?.color ?? "default"} icon={statusInfo?.icon ?? null}>
+      {statusInfo?.label ?? status}
     </Tag>
   );
 }

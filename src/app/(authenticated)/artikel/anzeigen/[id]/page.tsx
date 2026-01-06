@@ -12,6 +12,7 @@ import type { HttpError } from "@refinedev/core";
 import { supabaseBrowserClient } from "@/utils/supabase/client";
 import SyncStockSingleProductButton from "@/components/artikel/SyncStockSingleProductButton";
 import { PoItemStatusTag } from "@components/common/tags/states/po_item";
+import { useParams } from "next/navigation";
 
 /* ---------- Typen ---------- */
 type AppProduct = Tables<"app_products">;
@@ -132,15 +133,18 @@ const UsedInImageCell: React.FC<{ id: number; alt?: string; size?: number }> = (
 
 export default function ArtikelShowPage({ params }: { params: { id: string } }) {
   // Route-ID ist der Billbee-Produkt-ID-Wert (= id)
-  const idNum = Number(params.id);
+  const productId = useParams().id;
+  const idNum = Number(productId);
   const hasNumericId = Number.isFinite(idNum);
 
   /* ---------- Produkt laden (app_products) ---------- */
   const { queryResult } = useShow<AppProduct, HttpError>({
     resource: "app_products",
-    id: params.id, // dataProvider: primaryKey = "id"
+    id: idNum ?? "", // dataProvider: primaryKey = "id"
     meta: { select: "*" },
   });
+
+  console.log(idNum)
 
   const p = queryResult?.data?.data;
 

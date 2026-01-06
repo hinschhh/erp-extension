@@ -76,6 +76,136 @@ const handleUpload = (file: File, fieldName: string) => {
 - Match Supabase table/view names exactly (e.g., `app_purchase_orders`, `app_inbound_shipments`)
 - Use views for read-only data, tables for mutations
 
+## UI Guidelines for View and Edit Screens
+**ERP / MES – Domain-Driven, Refine-based**
+
+### Goal
+Unified, understandable, and maintainable UI decisions for View screens, Edit screens, and Actions, based on the business role of a data object.
+
+**Core Principle: Edit is for maintenance – View is for work – Actions replace Edit.**
+
+### 1. Fundamental Decision: Type of Data Object
+Every data object MUST be assigned to one of the following categories before implementing the UI.
+
+### 2. Data Object Categories & Mandatory UI Rules
+
+#### A. Master Data
+
+**Description**
+- Relatively stable
+- Rare, deliberate changes
+- Changes have potentially large impacts
+
+**Examples**
+- Product / Article
+- Supplier
+- Employee
+- Article attributes
+
+**UI Rules**
+- ❌ No separate View screen
+- ✅ Edit screen is the default
+- ✅ Save / Cancel only visible when changes are made
+- ✅ Sensitive fields (e.g., inventory, prices, critical parameters) not inline
+  → separate form or modal
+
+**Key Principle:** *Master data is maintained, not processed.*
+
+#### B. Transactional & Workflow Data
+
+**Description**
+- Object goes through a status lifecycle
+- Is "processed"
+- Many readers, few editors
+
+**Examples**
+- Sales order
+- Purchase order
+- Production order
+- Complaint
+
+**UI Rules**
+- ✅ View screen is the entry point
+- ✅ Status, history, logs visible
+- ✅ Business actions directly in the View (buttons)
+- ⚠️ Edit screen only for metadata (date, note, assignment)
+- ❌ No inline edits for core business logic
+
+**Key Principle:** *Everything with status → View-first + Actions.*
+
+#### C. Externally Managed State Data (External SSOT)
+
+**Description**
+- Data is displayed but not "owned"
+- Source of truth lies outside (e.g., Billbee, Shopify)
+
+**Examples**
+- Inventory levels (SSOT: Billbee)
+- Payment status
+- Shipping status
+
+**UI Rules**
+- ✅ Exclusively read-only View
+- ❌ No Edit screen
+- ❌ No direct changes
+- ✅ Changes only indirectly through business processes
+  (e.g., inbound shipment, inventory count, correction posting)
+- ✅ Clearly label the source ("managed by …")
+
+**Key Principle:** *External SSOT → never edit directly.*
+
+#### D. Operational Short-lived & Intermediate Data
+
+**Description**
+- Short-lived
+- Operational
+- Often one-time or person-specific
+
+**Examples**
+- Inbound shipment position
+- Inventory count
+- Time entry
+- Production feedback
+
+**UI Rules**
+- ✅ Form-first
+- ❌ No separate View screen necessary
+- ✅ After saving: completion / return to list
+- ⚠️ Corrections via new record, not Edit
+
+**Key Principle:** *Operational data is captured, not managed.*
+
+### 3. Decision Checklist (Mandatory)
+Before any UI implementation, the following checklist MUST be considered:
+
+1. **Does the object have a status lifecycle?**
+   → Yes: View + Actions
+
+2. **Is it master data?**
+   → Yes: Edit-only
+
+3. **Is the source of truth external?**
+   → Yes: Read-only
+
+4. **Is it actively "processed"?**
+   → Yes: View-first
+
+5. **Does a change have major business impact?**
+   → Yes: explicit Edit form, no inline edit
+
+### 4. Project-wide Guidelines
+- No Edit screen without business justification
+- No View screen without added value
+- Status changes happen through Actions, not Edit forms
+- Backend (Supabase) validates status changes and permissions
+- Frontend displays state and triggers actions – no business logic
+
+### 5. Quick Reference (for rapid decisions)
+- **Master data** → Edit
+- **Transactions** → View + Actions
+- **External data** → Read-only
+- **Operational data** → Form
+
 ## Testing Guidelines
 - No automated test suite is defined yet; prioritize high-impact manual checks (auth flows, data mutations, critical edge functions).
 - When adding tests, prefer integration-level coverage near pages/API routes; mirror file paths in a parallel `__tests__` or `tests` directory.

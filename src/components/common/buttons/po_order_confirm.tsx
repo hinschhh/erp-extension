@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { Button, Checkbox, DatePicker, Form, message, Modal, Tooltip, Upload } from "antd";
 import type { UploadFile, RcFile } from "antd/es/upload/interface";
 import { useOne, useInvalidate } from "@refinedev/core";
@@ -13,12 +13,11 @@ import {
 import { Tables } from "@/types/supabase";
 import { supabaseBrowserClient } from "@utils/supabase/client";
 import { useModalForm } from "@refinedev/antd";
-import { useInitialValue } from "@dnd-kit/core/dist/hooks/utilities";
 
 type PurchaseOrder = Tables<"app_purchase_orders">;
-type Props = { orderId: string; onSuccess?: () => void };
+type Props = { orderId: string; onSuccessAction?: () => void };
 
-export default function OrderStatusActionButton({ orderId, onSuccess }: Props) {
+export default function OrderStatusActionButton({ orderId, onSuccessAction }: Props) {
   const supabase = supabaseBrowserClient;
   const invalidate = useInvalidate();
 
@@ -139,7 +138,7 @@ export default function OrderStatusActionButton({ orderId, onSuccess }: Props) {
       }),
     ]);
 
-    onSuccess?.();
+    onSuccessAction?.();
   } finally {
     setSubmitting(false);
   }

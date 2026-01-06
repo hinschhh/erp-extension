@@ -6,21 +6,15 @@ export async function DELETE(request: NextRequest) {
     console.log("SharePoint delete API called");
     
     const body = await request.json();
-    const { fileName, subfolder, basePath } = body;
-    
-    console.log("Delete file:", fileName);
-    console.log("From subfolder:", subfolder);
-    console.log("Base path:", basePath);
-    
-    if (!fileName) {
-      return NextResponse.json(
-        { error: "No filename provided" },
-        { status: 400 }
-      );
+    const { fileUrl } = body as { fileUrl?: string };
+
+    if (!fileUrl) {
+      return NextResponse.json({ error: "No fileUrl provided" }, { status: 400 });
     }
 
     // Delete from SharePoint
-    const success = await deleteFromSharePoint(fileName, subfolder || "", basePath || "");
+    const success = await deleteFromSharePoint(fileUrl);
+
 
     if (!success) {
       return NextResponse.json(

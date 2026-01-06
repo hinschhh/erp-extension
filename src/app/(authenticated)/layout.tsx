@@ -12,9 +12,9 @@ const CustomTitle = ({ collapsed }: { collapsed: boolean }) => (
   <Link href="/">
     <span>
       {collapsed ? (
-        <Image src="/LL_500x500.png" alt="L&amp;L" width={60} height={60} />
+        <Image src="../../../public/LL_500x500.png" alt="L&L" width={60} height={60} />
       ) : (
-        <Image src="/L&amp;L_Logo_1200_x_200.jpg" alt="Land &amp; Liebe" width={160} height={27} />
+        <Image src="/L&L_Logo_1200_x_200.jpg" alt="Land & Liebe" width={171} height={40} />
       )}
     </span>
   </Link>

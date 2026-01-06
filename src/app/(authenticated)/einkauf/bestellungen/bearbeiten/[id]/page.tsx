@@ -2,36 +2,31 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useCustomMutation, useInvalidate } from "@refinedev/core";
-import {
-  useForm,
-  Edit,
-  RefreshButton,
-  ListButton,
-} from "@refinedev/antd";
-import { Button, Card, Checkbox, Col, DatePicker, Form, Input, InputNumber, Row, Tabs, TabsProps, Upload, Modal, message } from "antd";
-import type { UploadProps } from "antd";
+import { useCallback, useEffect, useMemo } from "react";
+
+import { useCustomMutation, useInvalidate, useNotification, useUpdate } from "@refinedev/core";
+import { useForm, Edit, RefreshButton, ListButton, SaveButton, ShowButton } from "@refinedev/antd";
+
+import { Button, Card, Checkbox, Col, DatePicker, Form, Input, InputNumber, Modal, Row, Space, Tooltip, Upload, message } from "antd";
 import { UploadOutlined, DeleteOutlined, EyeOutlined } from "@ant-design/icons";
+
 import dayjs from "dayjs";
-
 import { Tables } from "@/types/supabase";
-import { PoStatusTag } from "@components/common/tags/states/po";
 import SelectSupplier from "@components/common/selects/supplier";
-
 import { parseNumber } from "@/utils/formats";
 import EinkaufBestellpositionenNormalBearbeiten from "@components/einkauf/bestellungen/positionen/normal";
 import EinkaufBestellpositionenSpecialBearbeiten from "@components/einkauf/bestellungen/positionen/special";
-import OrderStatusActionButton from "@components/common/buttons/po_order_confirm";
-import { useCallback, useEffect, useState } from "react";
-import ZugehoerigeWareneingänge from "@components/einkauf/bestellungen/listInboundShipments";
+import { PoStatusTag } from "@components/common/tags/states/po";
 
 type Po = Tables<"app_purchase_orders">;
 
 export default function EinkaufsBestellungenBearbeiten() {
   const params = useParams() as { id: string };
   const orderId = params?.id;
+  const orderIdStr = orderId?.toString();
 
-  const [uploadingConfirmation, setUploadingConfirmation] = useState(false);
+  const invalidate = useInvalidate();
+  const { open } = useNotification();
 
   const { formProps: formPropsHeader, saveButtonProps, queryResult } = useForm<Po>({
     resource: "app_purchase_orders",
@@ -42,312 +37,352 @@ export default function EinkaufsBestellungenBearbeiten() {
     redirect: false,
   });
 
-  const invalidate = useInvalidate();
-
-  const { mutate: uploadFile } = useCustomMutation();
-  const { mutate: deleteFile } = useCustomMutation();
-
-  const handleUpload = async (file: File, fieldName: string, prefix: string, setLoading: (loading: boolean) => void) => {
-    setLoading(true);
-    
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("subfolder", `Einkauf/Bestellungen/${formPropsHeader?.initialValues?.order_number || "temp"}`);
-    formData.append("prefix", prefix);
-
-    uploadFile(
-      {
-        url: "/api/sharepoint/upload",
-        method: "post",
-        values: formData,
-        successNotification: (data) => ({
-          message: `${file.name} erfolgreich hochgeladen`,
-          type: "success",
-        }),
-        errorNotification: (error) => ({
-          message: "Upload fehlgeschlagen",
-          description: error?.message || "Unbekannter Fehler",
-          type: "error",
-        }),
-      },
-      {
-        onSuccess: async (data) => {
-          // Update form field with file URL
-          formPropsHeader.form?.setFieldValue(fieldName, data.data.fileUrl);
-          
-          // Update database via Supabase
-          const recordId = formPropsHeader?.initialValues?.id;
-          if (recordId) {
-            const { supabaseBrowserClient } = await import("@/utils/supabase/client");
-            
-            await supabaseBrowserClient
-              .from("app_purchase_orders")
-              .update({ [fieldName]: data.data.fileUrl })
-              .eq("id", recordId);
-            
-            // Invalidate cache to refresh data
-            invalidate({
-              resource: "app_purchase_orders",
-              invalidates: ["detail"],
-              id: recordId,
-            });
-          }
-          setLoading(false);
-        },
-        onError: () => {
-          setLoading(false);
-        },
-      }
-    );
-    
-    return false;
-  };
-
-  const handleDelete = async (fieldName: string, fileName: string) => {
-    Modal.confirm({
-      title: 'Datei löschen',
-      content: 'Möchten Sie diese Datei wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.',
-      okText: 'Löschen',
-      okType: 'danger',
-      cancelText: 'Abbrechen',
-      onOk: async () => {
-        const recordId = formPropsHeader?.initialValues?.id;
-        const subfolder = `Einkauf/Bestellungen/${formPropsHeader?.initialValues?.order_number || ""}`;
-        
-        deleteFile(
-          {
-            url: "/api/sharepoint/delete",
-            method: "delete",
-            values: { fileName, subfolder },
-            successNotification: {
-              message: "Datei erfolgreich gelöscht",
-              type: "success",
-            },
-            errorNotification: {
-              message: "Löschen fehlgeschlagen",
-              type: "error",
-            },
-          },
-          {
-            onSuccess: async () => {
-              // Update database
-              if (recordId) {
-                const { supabaseBrowserClient } = await import("@/utils/supabase/client");
-                
-                await supabaseBrowserClient
-                  .from("app_purchase_orders")
-                  .update({ [fieldName]: null })
-                  .eq("id", recordId);
-                
-                // Update form and invalidate cache
-                formPropsHeader.form?.setFieldValue(fieldName, null);
-                invalidate({
-                  resource: "app_purchase_orders",
-                  invalidates: ["detail"],
-                  id: recordId,
-                });
-              }
-            },
-          }
-        );
-      },
-    });
-  };
-
-  const orderIdStr = orderId?.toString();
-  const supplier = Form.useWatch("supplier", formPropsHeader.form);
-
-
-
-    // + NEU: Status direkt aus dem geladenen Datensatz
+  // Datensatz aus dem Query (immer die beste Quelle für "aktuelle Wahrheit")
   const record = queryResult?.data?.data;
   const status = record?.status ?? "draft";
+
+  const supplier = Form.useWatch("supplier", formPropsHeader.form);
+
+  // Locks
   const costs = Number(record?.shipping_cost_net ?? 0);
   const isLocked = Boolean(record?.separate_invoice_for_shipping_cost) || costs > 0;
 
-  // + NEU: Form-Werte aktualisieren, wenn record neu geladen wurde
+  // Form aktualisieren, wenn record neu geladen wurde
   useEffect(() => {
     if (record) {
-      formPropsHeader.form?.setFieldsValue(record);
+      formPropsHeader.form?.setFieldsValue(record as any);
     }
   }, [record, formPropsHeader.form]);
 
-  const handleActionSuccess = useCallback(() => {
-  // refetch kann bei refine optional sein → doppelt absichern
-  queryResult?.refetch?.();
-}, [queryResult])
+  // -------- SharePoint: Upload/Delete über useCustomMutation --------
+  const { mutate: uploadSharepoint, isPending: isUploadingConfirmation } = useCustomMutation();
+  const { mutate: deleteSharepoint, isPending: isDeletingConfirmation } = useCustomMutation();
 
-const items: TabsProps['items'] =[
-  {
-    key: '1',
-    label: `Positionen`,
-    children: <>
-                <EinkaufBestellpositionenNormalBearbeiten orderId={orderIdStr as string} supplier={supplier as string} status={status as string} />
-                <EinkaufBestellpositionenSpecialBearbeiten orderId={orderIdStr as string} supplier={supplier as string} status={status as string}/>
-            </>,
-  },
-  {
-    key: '2',
-    label: `Wareneingänge`,
-    children: <ZugehoerigeWareneingänge orderId={orderIdStr as string} />
-  }
-]
+  // DB Update über Refine (nicht direkt Supabase-Client)
+  const { mutate: updateOrderFieldMutate } = useUpdate<Po>();
+
+  const refreshOrder = useCallback(() => {
+    if (!orderIdStr) return;
+
+    invalidate({
+      resource: "app_purchase_orders",
+      invalidates: ["detail"],
+      id: orderIdStr,
+    });
+
+    queryResult?.refetch?.();
+  }, [invalidate, orderIdStr, queryResult]);
+
+  const updateOrderField = useCallback(
+    (fieldName: keyof Po, value: any) => {
+      if (!orderIdStr) return;
+
+      updateOrderFieldMutate(
+        {
+          resource: "app_purchase_orders",
+          id: orderIdStr,
+          values: { [fieldName]: value } as any,
+          successNotification: false,
+          errorNotification: false,
+        },
+        {
+          onSuccess: () => {
+            // UI sofort aktualisieren
+            formPropsHeader.form?.setFieldValue(fieldName as string, value);
+            refreshOrder();
+          },
+          onError: (e: any) => {
+            open?.({
+              type: "error",
+              message: "Speichern fehlgeschlagen",
+              description: e?.message ?? "Unbekannter Fehler",
+            });
+          },
+        },
+      );
+    },
+    [formPropsHeader.form, open, orderIdStr, refreshOrder, updateOrderFieldMutate],
+  );
+
+  // Quelle für URL: record (truth) + fallback Form (für instant UI)
+  const confirmationUrl = useMemo(() => {
+    return (
+      record?.confirmation_file_url ??
+      formPropsHeader.form?.getFieldValue("confirmation_file_url") ??
+      null
+    );
+  }, [record?.confirmation_file_url, formPropsHeader.form]);
+
+  const buildOrderFolder = useCallback(() => {
+    const orderNumber =
+      formPropsHeader.form?.getFieldValue("order_number") ??
+      record?.order_number ??
+      "temp";
+
+    // Passe das an deinen SharePoint-API Vertrag an:
+    // - subfolder: relativ innerhalb basePath
+    // - basePath: oberster Ordner
+    return {
+      subfolder: `Bestellungen/${orderNumber}`,
+      basePath: "00 Web-App/Einkauf",
+    };
+  }, [formPropsHeader.form, record?.order_number]);
+
+  const handleUploadConfirmation = useCallback(
+    (file: File) => {
+      const { subfolder, basePath } = buildOrderFolder();
+
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("subfolder", subfolder);
+      fd.append("prefix", "Auftragsbestaetigung");
+      fd.append("basePath", basePath);
+
+      uploadSharepoint(
+        {
+          url: "/api/sharepoint/upload",
+          method: "post",
+          values: fd,
+          successNotification: false,
+          errorNotification: false,
+        },
+        {
+          onSuccess: ({ data }) => {
+            const fileUrl = data?.fileUrl as string | undefined;
+
+            if (!fileUrl) {
+              open?.({
+                type: "error",
+                message: "Upload fehlgeschlagen",
+                description: "Keine fileUrl aus der API erhalten.",
+              });
+              return;
+            }
+
+            updateOrderField("confirmation_file_url", fileUrl);
+
+            open?.({
+              type: "success",
+              message: "Auftragsbestätigung hochgeladen",
+            });
+          },
+          onError: (e: any) => {
+            open?.({
+              type: "error",
+              message: "Upload fehlgeschlagen",
+              description: e?.message ?? "Unbekannter Fehler",
+            });
+          },
+        },
+      );
+
+      // Wichtig: verhindert AntD Auto-Upload
+      return false;
+    },
+    [buildOrderFolder, open, updateOrderField, uploadSharepoint],
+  );
+
+  const handleDeleteConfirmation = useCallback(() => {
+    const url = confirmationUrl as string | null;
+    if (!url) return;
+
+    const { subfolder, basePath } = buildOrderFolder();
+    const fileName = decodeURIComponent(url.split("/").pop() || "");
+
+    Modal.confirm({
+      title: "Datei löschen",
+      content: "Möchten Sie diese Datei wirklich löschen? Danach können Sie eine neue Datei hochladen.",
+      okText: "Löschen",
+      okType: "danger",
+      cancelText: "Abbrechen",
+      onOk: () => {
+        deleteSharepoint(
+          {
+            url: "/api/sharepoint/delete",
+            method: "delete",
+            values: {
+              fileUrl: confirmationUrl,
+            },
+            successNotification: false,
+            errorNotification: false,
+          },
+          {
+            onSuccess: () => {
+              updateOrderField("confirmation_file_url", null);
+              open?.({ type: "success", message: "Datei gelöscht" });
+            },
+            onError: (e: any) => {
+              open?.({
+                type: "error",
+                message: "Löschen fehlgeschlagen",
+                description: e?.message ?? "Unbekannter Fehler",
+              });
+            },
+          },
+        );
+      },
+    });
+  }, [confirmationUrl, buildOrderFolder, deleteSharepoint, updateOrderField, open]);
 
   return (
-    <>
     <Edit
-      title="Einkauf - Bestellung bearbeiten"
+      title={`Einkauf - Bestellung ${record?.order_number} bearbeiten`}
+      headerProps={{
+        title: `Einkauf - Bestellung ${record?.order_number ?? "--"} bearbeiten`,
+        subTitle: (
+          <Space>
+            {record?.supplier} <PoStatusTag status={record?.status ?? "--"} />
+          </Space>
+        ),
+      }}
+      contentProps={{
+        style: { background: "none", padding: "0px" },
+      }}
       headerButtons={
         <>
+          <ShowButton resource="app_purchase_orders" hideText recordItemId={orderIdStr as string} />
           <ListButton hideText />
           <RefreshButton hideText />
-          <OrderStatusActionButton orderId={orderId} onSuccess={handleActionSuccess} />
-        </> 
+        </>
       }
-      saveButtonProps={saveButtonProps} 
-    >
-      <Form {...formPropsHeader} layout="vertical" id="edit-po-header-form">
-        <Row gutter={24}>
-          <Col span={8}>
-            <Form.Item label="ID" name="id" hidden>
-              <Input disabled />
-            </Form.Item>
+      footerButtons={<SaveButton hidden />}>
+      <Row gutter={16} style={{ padding: 0, margin: 0 }}>
+        <Col span={18} style={{ paddingRight: 8, margin: 0 }}>
+          <EinkaufBestellpositionenNormalBearbeiten
+            orderId={orderIdStr as string}
+            supplier={supplier as string}
+            status={status as string}
+          />
+          <EinkaufBestellpositionenSpecialBearbeiten
+            orderId={orderIdStr as string}
+            supplier={supplier as string}
+            status={status as string}
+          />
+        </Col>
 
-            <Form.Item
-              label="Bestellnummer"
-              name="order_number"
-              rules={[{ required: true, message: "Bestellnummer fehlt noch" }]}
-            >
-              <Input disabled />
-            </Form.Item>
+        <Col span={6} style={{ textAlign: "right" }}>
+          <Card
+            actions={[<SaveButton key="save" {...saveButtonProps} style={{ float: "right", marginRight: 24 }} />]}
+          >
+            <Form {...formPropsHeader} layout="vertical" id="edit-po-header-form">
+              <Form.Item label="ID" name="id" hidden>
+                <Input disabled />
+              </Form.Item>
 
-            <Form.Item label="Bestelldatum" name="ordered_at">
-              <Input disabled />
-            </Form.Item>
-
-            <Form.Item label="Hersteller" name="supplier">
-              <SelectSupplier disabled />
-            </Form.Item>
-
-            <div style={{ paddingTop: 8 }}>
-              <PoStatusTag status={status || "draft"} />
-            </div>
-          </Col>
-
-          <Col span={8}>
-            <Form.Item label="Externe Bestellnummer" name="confirmation_number">
-              <Input />
-            </Form.Item>
-
-            <Form.Item label="Bestätigungsdatum" getValueProps={(v) => ({ value: v ? dayjs(v) : null })} name="confirmation_date">
-              <DatePicker type="date" placeholder="Datum wählen..." format="DD.MM.YYYY" style={{ width: "100%" }} />
-            </Form.Item>
-
-            <div style={{ marginBottom: 24 }}>
-              <label style={{ display: "block", marginBottom: 8 }}>Auftragsbestätigung hochladen</label>
-              <Upload
-                beforeUpload={(file) => handleUpload(file, "confirmation_file_url", "Auftragsbestaetigung", setUploadingConfirmation)}
-                showUploadList={false}
-                accept=".pdf,.jpg,.jpeg,.png"
-                disabled={!!formPropsHeader?.initialValues?.confirmation_file_url}
+              <Form.Item
+                label="Versandkosten netto"
+                name="shipping_cost_net"
+                normalize={parseNumber}
+                style={{ marginBottom: 24, textAlign: "left" }}
               >
-                <Button 
-                  icon={<UploadOutlined />} 
-                  loading={uploadingConfirmation}
-                  disabled={!!formPropsHeader?.initialValues?.confirmation_file_url}
-                  size="small"
+                <InputNumber type="number" disabled={isLocked} addonAfter="€" />
+              </Form.Item>
+
+              <Form.Item
+                name="separate_invoice_for_shipping_cost"
+                valuePropName="checked"
+                style={{ marginBottom: 24, textAlign: "left" }}
+              >
+                <Checkbox
+                  onChange={() => {
+                    if (costs > 0) {
+                      message.warning("Nicht änderbar: Es sind bereits Versandkosten gebucht.");
+                      formPropsHeader.form?.setFieldValue(
+                        "separate_invoice_for_shipping_cost",
+                        record?.separate_invoice_for_shipping_cost ?? false,
+                      );
+                    }
+                  }}
                 >
-                  {formPropsHeader?.initialValues?.confirmation_file_url ? "Bereits hochgeladen" : "Klicken zum Hochladen"}
-                </Button>
-              </Upload>
-              {formPropsHeader?.initialValues?.confirmation_file_url && (
-                <div style={{ marginTop: 8 }}>
-                  <a href={formPropsHeader.initialValues.confirmation_file_url} target="_blank" rel="noopener noreferrer" style={{ marginRight: 16 }}>
-                    <EyeOutlined style={{ marginRight: 4 }} />
-                    Datei öffnen
-                  </a>
-                  <Button 
-                    type="link"
-                    size="small" 
-                    danger 
-                    icon={<DeleteOutlined />}
-                    onClick={() => {
-                      const url = formPropsHeader.initialValues?.confirmation_file_url || "";
-                      const fileName = url.split("/").pop() || "";
-                      handleDelete("confirmation_file_url", decodeURIComponent(fileName));
-                    }}
-                    style={{ padding: 0, height: "auto" }}
-                  >
-                    Löschen
-                  </Button>
-                </div>
-              )}
-              <Form.Item name="confirmation_file_url" hidden>
+                  Versandkosten separat abrechnen?
+                </Checkbox>
+              </Form.Item>
+
+              <Form.Item label="Anmerkungen" name="notes">
+                <Input.TextArea rows={5} />
+              </Form.Item>
+
+              <Form.Item
+                label="Bestelldatum"
+                name="ordered_at"
+                getValueProps={(v) => ({ value: v ? dayjs(v) : null })}
+              >
+                <DatePicker type="date" placeholder="Datum wählen..." format="DD.MM.YYYY" style={{ width: "100%" }} />
+              </Form.Item>
+
+              <Form.Item label="Bestätigungsnummer" name="confirmation_number">
                 <Input />
               </Form.Item>
-            </div>
 
-             <Form.Item label="DOL planned" name="dol_planned">
-              <DatePicker type="date" placeholder="Datum wählen..." format="DD.MM.YYYY" style={{ width: "100%" }} disabled />
-            </Form.Item>
+              <Form.Item
+                label="Bestätigungsdatum"
+                name="confirmed_at"
+                getValueProps={(v) => ({ value: v ? dayjs(v) : null })}
+              >
+                <DatePicker type="date" placeholder="Datum wählen..." format="DD.MM.YYYY" style={{ width: "100%" }} />
+              </Form.Item>
 
-            <Form.Item label="DOL Actual" getValueProps={(v) => ({ value: v ? dayjs(v) : null })} name="dol_actual">
-              <DatePicker type="date" placeholder="Datum wählen..." format="DD.MM.YYYY" style={{ width: "100%" }} disabled />
-            </Form.Item>
+              {/* ---------------- Datei: Ansehen / Löschen / Neu hochladen ---------------- */}
+              <div style={{ marginBottom: 24, textAlign: "left" }}>
+                <label style={{ display: "block", marginBottom: 8 }}>Auftragsbestätigung</label>
 
-            <Form.Item label="Rechnungsnummer" name="invoice_number">
-              <Input />
-            </Form.Item>
+                <Space direction="vertical" style={{ width: "100%" }}>
+                  <Upload
+                    beforeUpload={(file) => handleUploadConfirmation(file as File)}
+                    showUploadList={false}
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    disabled={Boolean(confirmationUrl) || isUploadingConfirmation || isDeletingConfirmation}
+                  >
+                    <Button
+                      icon={<UploadOutlined />}
+                      loading={isUploadingConfirmation}
+                      disabled={Boolean(confirmationUrl) || isDeletingConfirmation}
+                      size="small"
+                    >
+                      {confirmationUrl ? "Bereits hochgeladen" : "Datei hochladen"}
+                    </Button>
+                  </Upload>
 
-            <Form.Item label="Rechnungsdatum" getValueProps={(v) => ({ value: v ? dayjs(v) : null })} name="invoice_date">
-              <DatePicker type="date" placeholder="Datum wählen..." format="DD.MM.YYYY" style={{ width: "100%" }} />
-            </Form.Item>
-           
-          </Col>
+                  {confirmationUrl && (
+                    <Space>
+                      <a href={confirmationUrl} target="_blank" rel="noopener noreferrer">
+                        <EyeOutlined style={{ marginRight: 6 }} />
+                        Datei öffnen
+                      </a>
 
-          <Col span={8}>
-            <Form.Item label="Notizen" name="notes">
-              <Input.TextArea rows={5} />
-            </Form.Item>
-              <Form.Item label="Anzahlungsrechnungen (mehrere mit Komma trennen)" >
-            <Input />
-            </Form.Item>
-            
-            <Form.Item
-              label="Versandkosten netto"
-              name="shipping_cost_net"
-              normalize={parseNumber}
-            >
-              <InputNumber type="number" disabled={isLocked} addonAfter="€"/>
-            </Form.Item>
+                      <Button
+                        type="link"
+                        size="small"
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={handleDeleteConfirmation}
+                        loading={isDeletingConfirmation}
+                        style={{ padding: 0, height: "auto" }}
+                      >
+                        Löschen
+                      </Button>
+                    </Space>
+                  )}
+                </Space>
 
-            <Form.Item
-              name="separate_invoice_for_shipping_cost"
-              valuePropName="checked"
-              
-              
-            >
-              <Checkbox              
-                onChange={(e) => {
-                    if (costs > 0) {
-                    message.warning(
-                        "Nicht änderbar: Es sind bereits Versandkosten gebucht."
-                    );
-                    formPropsHeader.form?.setFieldValue(
-                        "separate_invoice_for_shipping_cost",
-                        record?.separate_invoice_for_shipping_cost ?? false
-                    );
-                    }
-                }}>Versandkosten separat abrechnen?</Checkbox>
-            </Form.Item>
-          </Col>
-        </Row>
-      </Form>
+                {/* hidden field damit Form/DB konsistent bleibt */}
+                <Form.Item name="confirmation_file_url" hidden>
+                  <Input />
+                </Form.Item>
+              </div>
+
+              <Form.Item
+                label="DOL geplant"
+                name="dol_planned_at"
+                getValueProps={(v) => ({ value: v ? dayjs(v) : null })}
+              >
+                <DatePicker type="date" placeholder="Datum wählen..." format="DD.MM.YYYY" style={{ width: "100%" }} />
+              </Form.Item>
+
+            </Form>
+          </Card>
+        </Col>
+      </Row>
     </Edit>
-    <Card style={{ marginTop: 16 }}>
-      <Tabs items={items} />
-    </Card>
-    
-    </>
   );
 }

@@ -56,7 +56,7 @@ const resources: IResourceItem[] = [
     name: "app_purchase_orders",
     list: "/einkauf/bestellungen",
     create: "/einkauf/bestellungen/anlegen",
-    show: "/einkauf/bestellungen/anzeigen/:id",
+    show: "/einkauf/bestellungen/:id",
     edit: "/einkauf/bestellungen/bearbeiten/:id",
     parentName: "einkauf",
     options: { label: "Bestellungen" },

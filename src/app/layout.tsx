@@ -10,13 +10,15 @@ import { ColorModeContextProvider } from "@contexts/color-mode";
 import { AntdRegistry } from "@ant-design/nextjs-registry";
 import "@refinedev/antd/dist/reset.css";
 import "@ant-design/v5-patch-for-react-19";
-
-import { dataProvider, liveProvider } from "@refinedev/supabase";
+import { dataProvider } from "@/providers/data-provider";
+import { liveProvider } from "@refinedev/supabase";
 import { authProviderClient } from "../providers/auth-provider/auth-provider.client";
 import { supabaseBrowserClient } from "@utils/supabase/client";
 import resources from "@resources/index";
-import { notificationProvider, useNotificationProvider } from "@refinedev/antd";
+import { useNotificationProvider } from "@refinedev/antd";
 import { DevtoolsProvider } from "@refinedev/devtools";
+import { LoadingFallback } from "@components/common/loading-fallback";
+import { LoginOutlined } from "@ant-design/icons";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   // Color-Scheme nur clientseitig bestimmen
@@ -54,23 +56,24 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="icon" href="/favicon.ico" />
       </head>
       <body>
-        <Suspense fallback={<div>Loading...</div>}>
+        <Suspense fallback={<LoadingFallback />}>
           <RefineKbarProvider>
             <AntdRegistry>
               <ColorModeContextProvider defaultMode={defaultMode}>
                 <DevtoolsProvider>
                   <Refine
                     routerProvider={routerProvider}
-                    dataProvider={dataProvider(supabaseBrowserClient)}
+                    dataProvider={dataProvider}
                     authProvider={authProviderClient}
                     liveProvider={liveProvider(supabaseBrowserClient)}
+                    notificationProvider={useNotificationProvider}
                     resources={resources}
                     options={{
                       syncWithLocation: true,
                       warnWhenUnsavedChanges: true,
                       useNewQueryKeys: true,
                       projectId: "V7joKK-Y0IYFb-wYxC8k",
-                      title: { text: "Land & Liebe", icon: "/logo.png" },
+                      title: { text: "Land & Liebe", icon: <LoginOutlined /> },
                     }}  
                           >
                             {children}

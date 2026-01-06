@@ -110,7 +110,7 @@ export default function EinkaufBestellpositionenNormalBearbeiten({
   const { options: orderItemOptions, loading: orderItemLoading } = useOrderItemCascader();
 
   return (
-    <Card style={{ marginTop: 24 }}>
+    <Card>
       <div
         style={{
           display: "flex",

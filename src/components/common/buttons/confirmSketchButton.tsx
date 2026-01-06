@@ -13,11 +13,11 @@ type PoItemSpecial = Tables<"app_purchase_orders_positions_special">;
 type Props = {
   /** ID der Special-Position (UUID) */
   itemId: string;
-  /** Optional: Callback nach erfolgreicher Aktion (z. B. Tabelle neu laden) */
-  onDone?: () => void;
+  /** Optional: Server Action callback nach erfolgreicher Aktion (z. B. Tabelle neu laden) */
+  onDoneAction?: () => void;
 };
 
-export default function SketchConfirmButton({ itemId, onDone }: Props) {
+export default function SketchConfirmButton({ itemId, onDoneAction }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const supabase = supabaseBrowserClient;
   const invalidate = useInvalidate();
@@ -78,7 +78,7 @@ export default function SketchConfirmButton({ itemId, onDone }: Props) {
         }),
       ]);
 
-      onDone?.();
+      onDoneAction?.();
     } catch (e: any) {
       message.error(e?.message ?? "Unerwarteter Fehler");
     } finally {
@@ -94,6 +94,7 @@ export default function SketchConfirmButton({ itemId, onDone }: Props) {
         loading={isLoading || submitting}
         disabled={isConfirmed || !isNeeded}
         onClick={!isConfirmed ? handleClick : undefined}
+        size={"small"}
       >
         {label}
       </Button>
