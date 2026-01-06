@@ -268,6 +268,9 @@ export default function EinkaufsBestellungenBearbeiten() {
               <Form.Item label="ID" name="id" hidden>
                 <Input disabled />
               </Form.Item>
+              <Form.Item label="Lieferant" name="supplier" hidden>
+                <Input disabled />
+              </Form.Item>
 
               <Form.Item
                 label="Versandkosten netto"
