@@ -1,0 +1,40 @@
+name: Monthly Supabase Backup
+
+on:
+  schedule:
+    - cron: "0 2 1 * *" # jeden 1. des Monats um 02:00 (UTC)
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install PostgreSQL client (pg_dump)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Create backup file (pg_dump)
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          FILE="supabase_backup_${DATE}.backup"
+
+          pg_dump \
+            -h "${{ secrets.SUPABASE_DB_HOST }}" \
+            -p "${{ secrets.SUPABASE_DB_PORT }}" \
+            -U "${{ secrets.SUPABASE_DB_USER }}" \
+            -d "${{ secrets.SUPABASE_DB_NAME }}" \
+            -F c \
+            -f "$FILE"
+
+          echo "BACKUP_FILE=$FILE" >> $GITHUB_ENV
+
+      - name: Upload backup as GitHub Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-backup
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 90
