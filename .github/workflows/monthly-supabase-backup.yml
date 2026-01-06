@@ -2,7 +2,7 @@ name: Monthly Supabase Backup
 
 on:
   schedule:
-    - cron: "0 2 1 * *" # jeden 1. des Monats um 02:00 (UTC)
+    - cron: "0 6 * * *" # jeden Tag um 06:00 (UTC)
   workflow_dispatch: {}
 
 jobs:
