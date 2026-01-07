@@ -1,0 +1,87 @@
+name: Weekly Supabase Backup to SharePoint
+
+on:
+  schedule:
+    - cron: "0 3 * * 0" # Sonntags 03:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install tools (pg_dump, zip, jq, curl)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client zip jq curl
+
+      - name: Create backup file (pg_dump)
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          BACKUP_FILE="supabase_backup_${DATE}.backup"
+
+          pg_dump \
+            -h "${{ secrets.SUPABASE_DB_HOST }}" \
+            -p "${{ secrets.SUPABASE_DB_PORT }}" \
+            -U "${{ secrets.SUPABASE_DB_USER }}" \
+            -d "${{ secrets.SUPABASE_DB_NAME }}" \
+            -F c \
+            -f "$BACKUP_FILE"
+
+          echo "BACKUP_FILE=$BACKUP_FILE" >> $GITHUB_ENV
+
+      - name: Zip backup (optional but recommended)
+        run: |
+          ZIP_FILE="${{ env.BACKUP_FILE }}.zip"
+          zip -9 "$ZIP_FILE" "${{ env.BACKUP_FILE }}"
+          echo "ZIP_FILE=$ZIP_FILE" >> $GITHUB_ENV
+
+      - name: Get Microsoft Graph access token (Client Credentials)
+        env:
+          SP_TENANT_ID: ${{ secrets.SP_TENANT_ID }}
+          SP_CLIENT_ID: ${{ secrets.SP_CLIENT_ID }}
+          SP_CLIENT_SECRET: ${{ secrets.SP_CLIENT_SECRET }}
+        run: |
+          TOKEN_RESPONSE=$(curl -s -X POST \
+            "https://login.microsoftonline.com/${SP_TENANT_ID}/oauth2/v2.0/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "client_id=${SP_CLIENT_ID}" \
+            -d "client_secret=${SP_CLIENT_SECRET}" \
+            -d "grant_type=client_credentials" \
+            -d "scope=https://graph.microsoft.com/.default")
+
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+
+          if [ "$ACCESS_TOKEN" = "null" ] || [ -z "$ACCESS_TOKEN" ]; then
+            echo "Token konnte nicht geholt werden. Response:"
+            echo "$TOKEN_RESPONSE"
+            exit 1
+          fi
+
+          echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> $GITHUB_ENV
+
+      - name: Upload ZIP to SharePoint (Graph PUT to Drive)
+        env:
+          ACCESS_TOKEN: ${{ env.ACCESS_TOKEN }}
+          SP_SITE_ID: ${{ secrets.SP_SITE_ID }}
+          SP_DRIVE_ID: ${{ secrets.SP_DRIVE_ID }}
+          SP_BACKUP_FOLDER: ${{ secrets.SP_BACKUP_FOLDER }} # z.B. "IT/Supabase-Backups"
+        run: |
+          FILE_NAME="${{ env.ZIP_FILE }}"
+          # Zielpfad im Drive: root:/<folder>/<file>:/content
+          UPLOAD_URL="https://graph.microsoft.com/v1.0/sites/${SP_SITE_ID}/drives/${SP_DRIVE_ID}/root:/${SP_BACKUP_FOLDER}/${FILE_NAME}:/content"
+
+          HTTP_STATUS=$(curl -s -o /tmp/upload_response.json -w "%{http_code}" -X PUT "$UPLOAD_URL" \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -H "Content-Type: application/zip" \
+            --data-binary @"${FILE_NAME}")
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "Upload fehlgeschlagen (HTTP $HTTP_STATUS). Response:"
+            cat /tmp/upload_response.json
+            exit 1
+          fi
+
+          echo "Upload erfolgreich."
