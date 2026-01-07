@@ -47,11 +47,20 @@ export default function EinkaufsBestellungenBearbeiten() {
   const isLocked = Boolean(record?.separate_invoice_for_shipping_cost) || costs > 0;
 
   // Form aktualisieren, wenn record neu geladen wurde
-  useEffect(() => {
-    if (record) {
-      formPropsHeader.form?.setFieldsValue(record as any);
-    }
-  }, [record, formPropsHeader.form]);
+ useEffect(() => {
+  if (!record || !formPropsHeader.form) return;
+
+  const toDayjs = (v?: string | null) => (v ? dayjs(v) : null);
+
+  formPropsHeader.form.setFieldsValue({
+    ...record,
+    ordered_at: toDayjs(record.ordered_at),
+    confirmed_at: toDayjs(record.confirmed_at),
+    dol_planned_at: toDayjs(record.dol_planned_at),
+    // falls du noch mehr Date-Felder hast: hier ergänzen
+  } as any);
+}, [record, formPropsHeader.form]);
+
 
   // -------- SharePoint: Upload/Delete über useCustomMutation --------
   const { mutate: uploadSharepoint, isPending: isUploadingConfirmation } = useCustomMutation();

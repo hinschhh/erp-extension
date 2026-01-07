@@ -71,8 +71,13 @@ export default function InboundShipmentsList({itemsNormal, itemsSpecial, title}:
                             </Space>
                             <Space direction="vertical" size={2} style={{ width: "100%" }}>
                                 <Typography.Text type="secondary" style={{ display: "block" }} ellipsis>
-                                    {item.app_purchase_orders_positions_normal?.app_products?.supplier_sku ?? (item?.app_purchase_orders_positions_special?.base_model?.supplier_sku ?? "supplier_sku fehlt")}
+                                    {item.app_purchase_orders_positions_normal?.app_products?.supplier_sku ?? (item?.app_purchase_orders_positions_normal?.app_products?.supplier_sku ?? "supplier_sku fehlt")}
                                 </Typography.Text>
+                                {item.app_purchase_orders_positions_normal?.internal_notes?.trim() ? (
+                                    <Typography.Text type="secondary" style={{ display: "block" }} ellipsis>
+                                        Anmerkung: {item.app_purchase_orders_positions_normal?.internal_notes}
+                                    </Typography.Text>
+                                ) : null}
                             </Space>
                                 
                         </Col>
@@ -111,6 +116,12 @@ export default function InboundShipmentsList({itemsNormal, itemsSpecial, title}:
                                 <Typography.Text type="secondary" style={{ display: "block" }} ellipsis>
                                     {item.app_purchase_orders_positions_special?.base_model?.supplier_sku ?? (item?.app_purchase_orders_positions_special?.base_model?.supplier_sku ?? "supplier_sku fehlt")}
                                 </Typography.Text>
+                                {item.app_purchase_orders_positions_special?.internal_notes?.trim() ? (
+                                    <Typography.Text type="secondary" style={{ display: "block" }} ellipsis>
+                                        Anmerkung: {item.app_purchase_orders_positions_special?.internal_notes}
+                                    </Typography.Text>
+                                ) : null}
+                                
                             </Space>
                                 
                         </Col>

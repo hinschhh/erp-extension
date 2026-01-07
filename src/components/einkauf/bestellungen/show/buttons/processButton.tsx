@@ -166,7 +166,7 @@ export default function ProcessButton({order}: {order?: PurchaseOrder}) {
         <Form.Item label="Auftragsbestätigungsnummer" name="confirmation_number" rules={[{ required: true, message: "Bitte Auftragsbestätigungsnummer eingeben." }]}>
             <Input/>
         </Form.Item>
-        <Form.Item label="DOL geplant" name="dol_planned_at" rules={[{ required: true, message: "Bitte geplantes DOL-Datum eingeben." }]}>
+        <Form.Item label="DOL geplant" name="dol_planned_at" getValueProps={(v) => ({ value: v ? dayjs(v) : null })} rules={[{ required: true, message: "Bitte geplantes DOL-Datum eingeben." }]} >
             <DatePicker type="date" placeholder="Datum wählen..." format="DD.MM.YYYY" style={{ width: "100%" }} />
         </Form.Item>
         </Form>
