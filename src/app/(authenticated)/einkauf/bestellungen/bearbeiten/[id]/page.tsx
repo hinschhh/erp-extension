@@ -12,7 +12,6 @@ import { UploadOutlined, DeleteOutlined, EyeOutlined } from "@ant-design/icons";
 
 import dayjs from "dayjs";
 import { Tables } from "@/types/supabase";
-import SelectSupplier from "@components/common/selects/supplier";
 import { parseNumber } from "@/utils/formats";
 import EinkaufBestellpositionenNormalBearbeiten from "@components/einkauf/bestellungen/positionen/normal";
 import EinkaufBestellpositionenSpecialBearbeiten from "@components/einkauf/bestellungen/positionen/special";
@@ -246,8 +245,10 @@ export default function EinkaufsBestellungenBearbeiten() {
         </>
       }
       footerButtons={<SaveButton hidden />}>
-      <Row gutter={16} style={{ padding: 0, margin: 0 }}>
-        <Col span={18} style={{ paddingRight: 8, margin: 0 }}>
+      <Row gutter={[16, 16]} style={{ padding: 0, margin: 0 }}>
+        {/* Desktop: Positionen links (order 1), Formular rechts (order 2) */}
+        {/* Mobile: Formular oben (order -1), Positionen unten (order 1) */}
+        <Col xs={24} lg={18} style={{ order: 1 }} className="mobile-order-second">
           <EinkaufBestellpositionenNormalBearbeiten
             orderId={orderIdStr as string}
             supplier={supplier as string}
@@ -260,7 +261,7 @@ export default function EinkaufsBestellungenBearbeiten() {
           />
         </Col>
 
-        <Col span={6} style={{ textAlign: "right" }}>
+        <Col xs={24} lg={6} style={{ order: 2 }} className="mobile-order-first">
           <Card
             actions={[<SaveButton key="save" {...saveButtonProps} style={{ float: "right", marginRight: 24 }} />]}
           >
@@ -386,6 +387,18 @@ export default function EinkaufsBestellungenBearbeiten() {
           </Card>
         </Col>
       </Row>
+
+      {/* CSS für Mobile-Reihenfolge */}
+      <style jsx global>{`
+        @media (max-width: 991px) {
+          .mobile-order-first {
+            order: -1 !important;
+          }
+          .mobile-order-second {
+            order: 1 !important;
+          }
+        }
+      `}</style>
     </Edit>
   );
 }

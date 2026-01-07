@@ -1,6 +1,6 @@
 "use client";
 
-import { List, useTable,CreateButton, EditButton, DeleteButton, DateField } from "@refinedev/antd";
+import { List, useTable,CreateButton, EditButton, DeleteButton, DateField, Show, ShowButton } from "@refinedev/antd";
 import { Table, Card, Space } from "antd";
 import {Tables } from "@/types/supabase";
 import { ISStatusTag } from "@components/common/tags/states/is";
@@ -113,6 +113,7 @@ return (
     <Table.Column title="Notiz" dataIndex="notes" sorter />
     <Table.Column title="Aktionen" key="actions" render={(_, record) => (
       <Space>
+        <ShowButton hideText size="small" recordItemId={record.id} />
         <EditButton hideText size="small" recordItemId={record.id} />
         <DeleteButton
           hideText

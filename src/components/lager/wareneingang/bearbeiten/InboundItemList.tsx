@@ -26,6 +26,7 @@ export default function InboundItems({ inboundShipmentId, inboundShipmentStatus,
     tableProps,
   } = useEditableTable<InboundItems>({
     resource: "app_inbound_shipment_items",
+    pagination: { mode: "off" },
     meta: {
       // wir brauchen po_item_normal_id & order_id für das Nachladen der offenen Menge
       select: "id, shipment_id, order_id, po_item_normal_id, quantity_delivered, item_status, app_purchase_orders_positions_normal(app_products(bb_sku, supplier_sku), internal_notes), app_purchase_orders(order_number, invoice_number), app_purchase_orders_positions_special(supplier_sku, internal_notes, order_confirmation_ref)",
@@ -94,7 +95,7 @@ export default function InboundItems({ inboundShipmentId, inboundShipmentStatus,
   };
 
   return (
-    <Card style={{ marginTop: 24 }}>
+    <Card>
       <div
         style={{
           display: "flex",

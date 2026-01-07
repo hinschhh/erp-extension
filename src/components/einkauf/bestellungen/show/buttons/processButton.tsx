@@ -20,6 +20,14 @@ export default function ProcessButton({order}: {order?: PurchaseOrder}) {
   const { open } = useNotification();
   const { mutate: uploadSharepoint, isPending: isUploading } = useCustomMutation();
 
+  const buildOrderFolder = () => {
+    const orderNumber = order?.order_number ?? "PO-Unbekannt";
+    return {
+      subfolder: `Bestellungen/${orderNumber}`,
+      basePath: "00 Web-App/Einkauf",
+    };
+  };
+
   const { mutate: mutateOrder, isPending: isUpdatingOrder } = useUpdate({
     resource: "app_purchase_orders",
     id: order?.id,
@@ -80,14 +88,16 @@ export default function ProcessButton({order}: {order?: PurchaseOrder}) {
           return;
         }
 
+        const { subfolder, basePath } = buildOrderFolder();
+
         const fd = new FormData();
         fd.append("file", fileObj);
-        fd.append("subfolder", "Bestellungen");
-        fd.append("prefix", order?.order_number ?? "PO-Unbekannt");
-        fd.append("basePath", "00 Web-App/Einkauf");
+        fd.append("subfolder", subfolder);
+        fd.append("prefix", "Auftragsbestaetigung");
+        fd.append("basePath", basePath);
 
         uploadSharepoint(
-          { url: "/api/sharepoint/upload", method: "post", values: fd },
+          { url: "/api/sharepoint/upload", method: "post", values: fd, successNotification: false, errorNotification: false },
           {
             onSuccess: ({ data }) => resolve(data.fileUrl),
             onError: (e: any) => reject(e),

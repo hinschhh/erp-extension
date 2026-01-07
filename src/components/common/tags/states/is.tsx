@@ -29,7 +29,7 @@ export const statusMap: Record<
 export function ISStatusTag({ status }: { status: string }) {
   const statusInfo = statusMap[status];
   return (
-    <Tag color={statusInfo.color} icon={statusInfo.icon}>
+    <Tag color={statusInfo.color ?? "default"} icon={statusInfo.icon ?? null}>
       {statusInfo.label}
     </Tag>
   );

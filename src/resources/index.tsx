@@ -119,7 +119,7 @@ const resources: IResourceItem[] = [
     name: "app_inbound_shipments",
     list: "/lager/wareneingang",
     create: "/lager/wareneingang/anlegen",
-    show: "/lager/wareneingang/anzeigen/:id",
+    show: "/lager/wareneingang/:id",
     edit: "/lager/wareneingang/bearbeiten/:id",
     parentName: "lager",
     options: { label: "Wareneingang" },

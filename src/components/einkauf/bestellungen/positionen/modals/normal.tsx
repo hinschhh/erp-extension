@@ -31,6 +31,7 @@ export default function ButtonEinkaufBestellpositionenNormalHinzufuegen({orderId
         },
     });
     const form = createFormProps.form!;
+    console.log("supplier:", supplier);
 
     const { selectProps } = useSelect<Produkte>({
         resource: "app_products",
@@ -44,6 +45,7 @@ export default function ButtonEinkaufBestellpositionenNormalHinzufuegen({orderId
         }],
     });
 
+   
         const ausArtikelKopieren = async () => {
             const { data, error } = await dataProvider
                 .from("app_products")

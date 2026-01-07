@@ -17,7 +17,7 @@ import Link from "next/link";
 type Row = {
   product_id: number;
   sku: string | null;
-  inventory_category: string | null;
+  inventory_cagtegory: string | null;
   supplier: string | null;
   on_demand: boolean | null;      // ⬅️ NEU
   stock_free: number | string;
@@ -71,12 +71,12 @@ export default function BestellvorschlaegePage() {
 
   const { selectProps: invCatSelectProps } = useSelect({
     resource: "rpt_products_inventory_purchasing",
-    optionLabel: "inventory_category",
-    optionValue: "inventory_category",
+    optionLabel: "inventory_cagtegory",
+    optionValue: "inventory_cagtegory",
     pagination: { pageSize: 100 },
-    sorters: [{ field: "inventory_category", order: "asc" }],
-    filters: [{ field: "inventory_category", operator: "ne", value: null }],
-    meta: { select: "inventory_category" },
+    sorters: [{ field: "inventory_cagtegory", order: "asc" }],
+    filters: [{ field: "inventory_cagtegory", operator: "ne", value: null }],
+    meta: { select: "inventory_cagtegory" },
   });
   const inventoryCategoryOptions = useMemo(
     () => dedupeOptions((invCatSelectProps.options ?? []) as ColumnFilterOption[]),
@@ -154,7 +154,7 @@ export default function BestellvorschlaegePage() {
           width={150}
           ellipsis
           sorter
-          filteredValue={getDefaultFilter("inventory_category", filters)}
+          filteredValue={getDefaultFilter("inventory_cagtegory", filters)}
           filterDropdown={(fp) => (
             <ColumnMultiSelectFilter
               {...fp}
