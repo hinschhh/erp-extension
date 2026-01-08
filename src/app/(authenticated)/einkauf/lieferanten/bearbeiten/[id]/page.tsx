@@ -138,7 +138,7 @@ export default function SupplierEditPage() {
                 <Card bordered>
                   <Row gutter={[16, 0]}>
                     <Col xs={24} md={12}>
-                      <Form.Item label="Name" name="name" rules={[{ required: true, message: "Pflichtfeld" }]}>
+                      <Form.Item label="Name" name="id" rules={[{ required: true, message: "Pflichtfeld" }]} initialValue={record?.id}>
                         <Input />
                       </Form.Item>
                       <Form.Item label="Kürzel" name="short_code">
@@ -162,7 +162,7 @@ export default function SupplierEditPage() {
                       <Form.Item label="USt-ID" name="vat_number">
                         <Input />
                       </Form.Item>
-                      <Form.Item label="Steuer-Land" name="tax_country">
+                      <Form.Item label="Steuer-Region" name="tax_country">
                         <Input placeholder="z. B. DE" />
                       </Form.Item>
                       <Form.Item label="Aktiv" name="active" valuePropName="checked">
@@ -300,7 +300,7 @@ function ContactsTable({
 }) {
   const { tableProps } = useTable<SupplierContact>({
     resource: "app_supplier_contacts",
-    filters: supplierId ? { initial: [{ field: "supplier_id", operator: "eq", value: supplierId }] } : {},
+    filters: supplierId ? { initial: [{ field: "supplier_id", operator: "in", value: [supplierId, "Verschiedene"], }] } : {},
     pagination: { current: 1, pageSize: 10 },
     syncWithLocation: false,
     queryOptions: { enabled: Boolean(supplierId) }, // <-- nur laden, wenn ID da
@@ -429,7 +429,7 @@ function ContactFormDrawer({
 function SupplierOrdersTable({ supplierId }: { supplierId: string | null }) {
   const { tableProps } = useTable<PurchaseOrder>({
     resource: "app_purchase_orders",
-    filters: supplierId ? { initial: [{ field: "supplier_id", operator: "eq", value: supplierId }] } : {},
+    filters: supplierId ? { initial: [{ field: "supplier_id", operator: "in", value: [supplierId, "Verschiedene"], }] } : {},
     pagination: { current: 1, pageSize: 10 },
     syncWithLocation: false,
     queryOptions: { enabled: Boolean(supplierId) }, // <-- nur laden, wenn ID da

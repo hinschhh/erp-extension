@@ -53,36 +53,6 @@ return (
               <PoStatusTag status={formPropsHeader.initialValues?.status || "draft"} />
             </div>
           </Col>
-
-          <Col span={8}>
-            <Form.Item label="Externe Bestellnummer" name="invoice_number">
-              <Input />
-            </Form.Item>
-
-            <Form.Item label="Rechnungsdatum" name="invoice_date">
-              <DatePicker type="date" placeholder="Datum wählen..." format="DD.MM.YYYY" style={{ width: "100%" }} />
-            </Form.Item>
-            <Form.Item
-              label="Versandkosten netto"
-              name="shipping_cost_net"
-              normalize={parseNumber}
-            >
-              <Input type="number" />
-            </Form.Item>
-
-            <Form.Item
-              name="separate_invoice_for_shipping_cost"
-              valuePropName="checked"
-            >
-              <Checkbox>Versandkosten separat abrechnen?</Checkbox>
-            </Form.Item>
-          </Col>
-
-          <Col span={8}>
-            <Form.Item label="Notizen" name="notes">
-              <Input.TextArea rows={6} />
-            </Form.Item>
-          </Col>
         </Row>
       </Form>
     </Create>

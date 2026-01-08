@@ -115,7 +115,6 @@ export default function InventurPruefenPage() {
                 </>
             }
         >
-            ```tsx
                         <Table<ProductGroup>
                             dataSource={groupedData}
                             rowKey={(record) => record.key}

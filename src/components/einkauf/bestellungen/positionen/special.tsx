@@ -66,8 +66,8 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
               sorters: [{ field: "bb_sku", order: "asc" }],
               filters: [{
                   field: "fk_bb_supplier",
-                  operator: "eq",
-                  value: supplier,
+                  operator: "in",
+                  value: [supplier, "Verschiedene"],
               }],
     
       });

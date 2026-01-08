@@ -40,8 +40,8 @@ export default function ButtonEinkaufBestellpositionenNormalHinzufuegen({orderId
         sorters: [{ field: "bb_sku", order: "asc" }],
         filters: [{
             field: "fk_bb_supplier",
-            operator: "eq",
-            value: supplier,
+            operator: "in",
+            value: [supplier, "Verschiedene"],
         }],
     });
 

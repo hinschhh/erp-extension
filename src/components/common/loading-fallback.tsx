@@ -23,7 +23,6 @@ export function LoadingFallback() {
             />
             <Spin
                 size="large"
-                tip="Lädt..."
                 indicator={<LoadingOutlined style={{ color: "black" }} spin />}
             />
         </div>

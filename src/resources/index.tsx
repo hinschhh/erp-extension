@@ -4,9 +4,8 @@ import {
   TagsOutlined,
   ShopOutlined,
   GoldOutlined,
-  PhoneOutlined
+  PhoneOutlined,
 } from "@ant-design/icons";
-import { Agent } from "http";
 
 /**
  * Leitlinien:
@@ -124,6 +123,21 @@ const resources: IResourceItem[] = [
     parentName: "lager",
     options: { label: "Wareneingang" },
   },
+
+  {
+    name: "accounting",
+    options: { label: "Buchhaltung" },
+    icon: <ShopOutlined />,
+  },
+  {
+    name: "monthly_closure",
+    list: "/buchhaltung/monatsabschluss",
+    show: "/buchhaltung/monatsabschluss",
+    options: { label: "Monatsabschluss" },
+    parentName: "accounting",
+  }
+
+
 
 
 ];

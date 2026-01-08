@@ -101,8 +101,8 @@ export default function EinkaufBestellpositionenNormalBearbeiten({
     filters: [
       {
         field: "fk_bb_supplier",
-        operator: "eq",
-        value: supplier,
+        operator: "in",
+        value: [supplier, "Verschiedene"],
       },
     ],
   });

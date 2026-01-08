@@ -5,7 +5,6 @@ import { useInvalidate } from "@refinedev/core";
 import { useModalForm, useSelect } from "@refinedev/antd";
 import { Tables } from "@/types/supabase";
 import { Button, Cascader, Checkbox, Col, Flex, Form, Input, Modal, Row, Select, Space } from "antd";
-import { useDataProvider, useOne, HttpError } from "@refinedev/core";
 import { supabaseBrowserClient } from "@utils/supabase/client";
 import {useOrderItemCascader} from "@components/common/selects/cascader_order_items";
 
@@ -47,8 +46,8 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
         sorters: [{ field: "bb_sku", order: "asc" }],
         filters: [{
             field: "fk_bb_supplier",
-            operator: "eq",
-            value: supplier,
+            operator: "in",
+            value: [supplier, "Verschiedene"],
         },
         {            
             field: "bb_sku",
@@ -64,8 +63,8 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
         sorters: [{ field: "bb_sku", order: "asc" }],
         filters: [{
             field: "fk_bb_supplier",
-            operator: "eq",
-            value: supplier,
+            operator: "in",
+            value: [supplier, "Verschiedene"],
         },
         {            
             field: "bb_sku",
