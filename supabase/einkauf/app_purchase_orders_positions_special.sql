@@ -19,7 +19,6 @@ create table public.app_purchase_orders_positions_special (
   goods_received_at date null,
   po_item_status public.po_item_status null default 'draft'::po_item_status,
   sketch_needed boolean null default true,
-  shipping_costs_proportional numeric(12, 2) not null default 0,
   fk_app_order_items_id bigint null,
   fk_app_orders_id bigint null,
   constraint app_purchase_orders_positions_special_pkey primary key (id),

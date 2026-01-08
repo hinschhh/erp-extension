@@ -5,6 +5,37 @@ export const formatCurrencyEUR = (value: number | null | undefined) => {
   return Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(n);
 };
 
+/**
+ * Format a number using German locale (non-currency)
+ * Use for displaying quantities, percentages, or other numeric values
+ */
+export const formatNumberDE = (
+  value: number | null | undefined,
+  options?: { decimals?: number; suffix?: string }
+): string => {
+  const n = typeof value === "number" ? value : 0;
+  const decimals = options?.decimals ?? 2;
+  const formatted = new Intl.NumberFormat("de-DE", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(n);
+  return formatted + (options?.suffix ?? "");
+};
+
+/**
+ * Normalize a string value (trim whitespace)
+ * Returns empty string for null/undefined
+ */
+export const normalize = (value: string | null | undefined): string => 
+  (value ?? "").trim();
+
+/**
+ * Normalize and convert to uppercase
+ * Useful for country codes, SKUs, etc.
+ */
+export const normalizeUpperCase = (value: string | null | undefined): string =>
+  normalize(value).toUpperCase();
+
 export const parseNumber = (v: unknown): number | null => {
   if (v === "" || v === null || v === undefined) return null;
   const n = Number(v);

@@ -12,7 +12,6 @@ create table public.app_purchase_orders_positions_normal (
   dol_actual_at date null,
   goods_received_at date null,
   po_item_status public.po_item_status null default 'draft'::po_item_status,
-  shipping_costs_proportional numeric(12, 2) not null default 0,
   fk_app_orders_id bigint null,
   fk_app_orders_id_array bigint[] null,
   constraint app_purchase_orders_positions_normal_pkey primary key (id),

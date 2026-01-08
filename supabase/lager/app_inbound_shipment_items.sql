@@ -7,6 +7,7 @@ create table public.app_inbound_shipment_items (
   quantity_delivered numeric(12, 3) not null,
   created_at timestamp with time zone not null default now(),
   item_status public.is_status null,
+  shipping_costs_proportional numeric null default 0,
   constraint app_inbound_shipment_items_pkey primary key (id),
   constraint app_inbound_shipment_items_po_item_normal_id_fkey foreign KEY (po_item_normal_id) references app_purchase_orders_positions_normal (id) on delete RESTRICT,
   constraint app_inbound_shipment_items_order_id_fkey foreign KEY (order_id) references app_purchase_orders (id) on delete RESTRICT,
@@ -22,7 +23,11 @@ create table public.app_inbound_shipment_items (
   constraint app_inbound_shipment_items_quantity_delivered_check check ((quantity_delivered > (0)::numeric))
 ) TABLESPACE pg_default;
 
+COMMENT ON COLUMN app_inbound_shipment_items.shipping_costs_proportional IS 'Proportional share of shipping costs (ANK/Anschaffungsnebenkosten) allocated to this specific shipment item. Calculated from app_inbound_shipments.shipping_cost_separate based on item value proportion.';
+
 create index IF not exists ix_inbound_items_order on public.app_inbound_shipment_items using btree (order_id) TABLESPACE pg_default;
+
+create index IF not exists idx_inbound_shipment_items_shipping_costs on public.app_inbound_shipment_items using btree (shipping_costs_proportional) TABLESPACE pg_default where (shipping_costs_proportional > (0)::numeric);
 
 create index IF not exists ix_inbound_items_normal on public.app_inbound_shipment_items using btree (po_item_normal_id) TABLESPACE pg_default;
 
