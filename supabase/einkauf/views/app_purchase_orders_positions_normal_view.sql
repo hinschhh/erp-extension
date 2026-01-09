@@ -33,9 +33,13 @@ select
   p.updated_at,
   p.fk_app_orders_id,
   o."bb_OrderNumber" as bb_order_number,
-  c."bb_Name" as customer_name
+  c."bb_Name" as customer_name,
+  oi_prod.bb_sku as order_item_sku,
+  oi_prod.bb_name as order_item_name
 from
   app_purchase_orders_positions_normal p
   left join received r on r.po_item_id = p.id
   left join app_orders o on o.id = p.fk_app_orders_id
-  left join app_customers c on c.id = o.fk_app_customers_id;
+  left join app_customers c on c.id = o.fk_app_customers_id
+  left join app_order_items oi on oi.id = p.fk_app_orders_id
+  left join app_products oi_prod on oi_prod.id = oi.fk_app_products_id;

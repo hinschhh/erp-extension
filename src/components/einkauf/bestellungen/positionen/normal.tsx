@@ -33,8 +33,16 @@ import ButtonEinkaufBestellpositionenNormalHinzufuegen from "@components/einkauf
 import { formatCurrencyEUR, parseNumber } from "@/utils/formats";
 import { useOrderItemCascader } from "@components/common/selects/cascader_order_items";
 
-type PoItemNormal = Omit<Tables<"app_purchase_orders_positions_normal_view">, "id"> & {
-  id: string;
+type PoItemNormal = Tables<"app_purchase_orders_positions_normal"> & {
+  app_products?: Pick<Tables<"app_products">, "bb_sku" | "supplier_sku" | "purchase_details"> | null;
+  app_orders?: (Pick<Tables<"app_orders">, "bb_OrderNumber"> & {
+    app_customers?: Pick<Tables<"app_customers">, "bb_Name"> | null;
+  }) | null;
+  app_order_items?: (Pick<Tables<"app_order_items">, "id"> & {
+    app_products?: Pick<Tables<"app_products">, "bb_sku"> | null;
+    app_order_item_attributes?: Pick<Tables<"app_order_item_attributes">, "bb_Name" | "bb_Value">[];
+  }) | null;
+  app_inbound_shipment_items?: Pick<Tables<"app_inbound_shipment_items">, "quantity_delivered">[];
 };
 type Produkte = Tables<"app_products">;
 
@@ -56,13 +64,16 @@ export default function EinkaufBestellpositionenNormalBearbeiten({
     editButtonProps: editButtonPropsEditableTableNormal,
     tableProps: editableTablePropsNormal,
   } = useEditableTable<PoItemNormal>({
-    resource: "app_purchase_orders_positions_normal_view",
+    resource: "app_purchase_orders_positions_normal",
     filters: {
       permanent: orderId ? [{ field: "order_id", operator: "eq", value: orderId }] : [],
     },
+    sorters: {
+      initial: [{ field: "created_at", order: "desc" }],
+    },
     pagination: { pageSize: 50 },
     meta: {
-      select: "*, app_products(bb_sku, supplier_sku, purchase_details)",
+      select: "*, app_products(bb_sku, supplier_sku, purchase_details), app_orders(bb_OrderNumber, app_customers(bb_Name)), app_order_items(id, app_products(bb_sku), app_order_item_attributes(bb_Name, bb_Value)), app_inbound_shipment_items(quantity_delivered)",
     },
   });
       const handleFinish: typeof formPropsEditableTableNormal.onFinish = (values: any) => {
@@ -256,7 +267,7 @@ export default function EinkaufBestellpositionenNormalBearbeiten({
                 <>
                   <NumberField value={value} />
                   <div style={{ fontSize: "0.75rem", color: "#888" }}>
-                    geliefert: {record.qty_received ?? 0}
+                    geliefert: {record.app_inbound_shipment_items?.reduce((sum, item) => sum + Number(item.quantity_delivered || 0), 0) ?? 0}
                   </div>
                 </>
               );
@@ -352,16 +363,30 @@ export default function EinkaufBestellpositionenNormalBearbeiten({
                 );
               }
 
-              if (!record.bb_order_number && !record.customer_name) {
+              const orderNumber = record.app_orders?.bb_OrderNumber;
+              const customerName = record.app_orders?.app_customers?.bb_Name;
+              const orderItem = record.app_order_items;
+              const orderItemSku = orderItem?.app_products?.bb_sku;
+              const grundmodell = orderItem?.app_order_item_attributes?.find(attr => attr.bb_Name === "Grundmodell")?.bb_Value;
+              
+              if (!orderNumber && !customerName) {
                 return "—";
               }
 
+              const orderLabel = `${orderNumber ?? ""} - (${customerName ?? ""})`;
+              const itemLabel = orderItemSku || grundmodell 
+                ? `${orderItemSku ?? ""} ${grundmodell ? ` – ${grundmodell}` : ""}`
+                : null;
+
               return (
-                <TextField
-                  value={`${record.bb_order_number ?? ""} - (${
-                    record.customer_name ?? ""
-                  })`}
-                />
+                <div>
+                  <div>{orderLabel}</div>
+                  {itemLabel && (
+                    <Typography.Text type="secondary" style={{ fontSize: "0.85em" }}>
+                      {itemLabel}
+                    </Typography.Text>
+                  )}
+                </div>
               );
             }}
           />
