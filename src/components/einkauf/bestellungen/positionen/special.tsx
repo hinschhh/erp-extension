@@ -84,7 +84,16 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
     
       });
 
-      const { options, loading } = useOrderItemCascader();
+      // Sammle alle bereits verknüpften Order/Item-IDs aus der aktuellen Tabelle
+      const existingOrderIds = tableProps.dataSource
+        ?.map(row => (row as PoItemSpecial).fk_app_orders_id)
+        .filter((id): id is number => typeof id === 'number') ?? [];
+      
+      const existingItemIds = tableProps.dataSource
+        ?.map(row => (row as PoItemSpecial).fk_app_order_items_id)
+        .filter((id): id is number => typeof id === 'number') ?? [];
+
+      const { options, loading, onSearch } = useOrderItemCascader(existingOrderIds, existingItemIds);
 
   return (
     <Card style={{ marginTop: 24 }}>
@@ -233,8 +242,9 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
             }}/>
             <Table.Column title="Versand anteilig" dataIndex="shipping_costs_proportional" ellipsis={true} 
             width={100}
+            hidden
                 render={(_, record: PoItemSpecial) => {
-                    return formatCurrencyEUR(record.shipping_costs_proportional ?? 0);
+                    return formatCurrencyEUR(0);
                 }}
             />
             <Table.Column title="Referenz" dataIndex="order_item_cascader"
@@ -264,9 +274,30 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
                              <Cascader 
                               options={options} 
                               loading={loading}
-                              showSearch
+                              showSearch={{
+                                filter: (inputValue, path) => {
+                                  // Suche in der ersten Ebene (Order) nach Bestellnummer oder Kundenname
+                                  const orderLabel = path[0]?.label?.toString().toLowerCase() || "";
+                                  const searchLower = inputValue.toLowerCase();
+                                  
+                                  // Prüfe ob Bestellnummer oder Kundenname matched
+                                  if (orderLabel.includes(searchLower)) {
+                                    return true;
+                                  }
+                                  
+                                  // Zusätzlich in Item-Level suchen
+                                  if (path.length > 1) {
+                                    const itemLabel = path[1]?.label?.toString().toLowerCase() || "";
+                                    return itemLabel.includes(searchLower);
+                                  }
+                                  
+                                  return false;
+                                }
+                              }}
+                              onSearch={onSearch}
                               allowClear
-                              placeholder="Bestellung → Position"
+                              placeholder="Suche: Kunde, Bestellung oder SKU..."
+                              style={{ width: "100%" }}
                               />
                         </Form.Item>
                         <Form.Item name="fk_app_orders_id" hidden />

@@ -118,7 +118,16 @@ export default function EinkaufBestellpositionenNormalBearbeiten({
     ],
   });
 
-  const { options: orderItemOptions, loading: orderItemLoading } = useOrderItemCascader();
+  // Sammle alle bereits verknüpften Order/Item-IDs aus der aktuellen Tabelle
+  const existingOrderIds = editableTablePropsNormal.dataSource
+    ?.map(row => (row as PoItemNormal).fk_app_orders_id)
+    .filter((id): id is number => typeof id === 'number') ?? [];
+  
+  const existingItemIds = editableTablePropsNormal.dataSource
+    ?.map(row => (row as PoItemNormal).fk_app_order_items_id)
+    .filter((id): id is number => typeof id === 'number') ?? [];
+
+  const { options: orderItemOptions, loading: orderItemLoading, onSearch } = useOrderItemCascader(existingOrderIds, existingItemIds);
 
   return (
     <Card>
@@ -308,8 +317,9 @@ export default function EinkaufBestellpositionenNormalBearbeiten({
             title="Versandkosten (anteilig)"
             width={100}
             ellipsis
+            hidden
             render={(_, record: PoItemNormal) => {
-              return formatCurrencyEUR(record.shipping_costs_proportional ?? 0);
+              return formatCurrencyEUR(0);
             }}
           />
 
@@ -320,8 +330,7 @@ export default function EinkaufBestellpositionenNormalBearbeiten({
             ellipsis
             render={(_, record: PoItemNormal) => {
               const total =
-                (record.unit_price_net ?? 0) * (record.qty_ordered ?? 0) +
-                (record.shipping_costs_proportional ?? 0);
+                (record.unit_price_net ?? 0) * (record.qty_ordered ?? 0);
               return formatCurrencyEUR(total);
             }}
           />
@@ -351,9 +360,30 @@ export default function EinkaufBestellpositionenNormalBearbeiten({
                       <Cascader
                         options={orderItemOptions}
                         loading={orderItemLoading}
-                        showSearch
+                        showSearch={{
+                          filter: (inputValue, path) => {
+                            // Suche in der ersten Ebene (Order) nach Bestellnummer oder Kundenname
+                            const orderLabel = path[0]?.label?.toString().toLowerCase() || "";
+                            const searchLower = inputValue.toLowerCase();
+                            
+                            // Prüfe ob Bestellnummer oder Kundenname matched
+                            if (orderLabel.includes(searchLower)) {
+                              return true;
+                            }
+                            
+                            // Zusätzlich in Item-Level suchen
+                            if (path.length > 1) {
+                              const itemLabel = path[1]?.label?.toString().toLowerCase() || "";
+                              return itemLabel.includes(searchLower);
+                            }
+                            
+                            return false;
+                          }
+                        }}
+                        onSearch={onSearch}
                         allowClear
-                        placeholder="Bestellung → Position"
+                        placeholder="Suche: Kunde, Bestellung oder SKU..."
+                        style={{ width: "100%" }}
                       />
                     </Form.Item>
                     {/* Hidden FKs, damit sie im Form-Model existieren */}

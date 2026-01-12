@@ -1,8 +1,9 @@
 "use client";
 
 import { useList } from "@refinedev/core";
-import { CascaderProps, Typography } from "antd";
+import { CascaderProps } from "antd";
 import { Tables } from "@/types/supabase";
+import { useState, useMemo } from "react";
 
 type Order = Tables<"app_orders"> & {
     app_customers?: Pick<Tables<"app_customers">, "bb_Name"> | null;
@@ -12,7 +13,6 @@ type OrderItem = Tables<"app_order_items"> & {
     app_products?: Pick<Tables<"app_products">, "bb_sku" | "bb_name"> | null;
     app_order_item_attributes?: Pick<Tables<"app_order_item_attributes">, "bb_Name" | "bb_Value">[];
 };
-
 
 const buildOptions = (
     orders?: Order[],
@@ -32,7 +32,7 @@ const buildOptions = (
         itemsByOrderId.set(orderId, group);
     }
 
-    // Cascader-Struktur erzeugen (nur Daten, kein JSX in Arrays)
+    // Cascader-Struktur erzeugen
     return orders.map((order) => {
         const children: CascaderProps["options"] =
             (itemsByOrderId.get(order.id as number) ?? []).map((item) => {
@@ -81,7 +81,7 @@ const buildOptions = (
             });
 
         return {
-            value: order.id, // Ebene 1: Order-ID
+            value: order.id,
             label: `${order.bb_OrderNumber ?? ""} - (${order.app_customers?.bb_Name ?? ""})`,
             children,
         };
@@ -90,43 +90,131 @@ const buildOptions = (
 
 
 /**
- * refine-Hook: Liefert Cascader Options + Loading-State
- * Nur refine-useList, keine React-State/Effects
+ * refine-Hook: Liefert Cascader Options + Loading-State mit dynamischer Suche
+ * Items werden nur für die aktuell geladenen 500 Orders abgefragt (optimiert)
+ * 
+ * @param currentOrderIds - Wenn gesetzt, werden diese Orders zusätzlich geladen (für bereits verknüpfte Items)
+ * @param currentOrderItemIds - Wenn gesetzt, werden diese Items zusätzlich geladen
  */
-export const useOrderItemCascader = (): {
+export const useOrderItemCascader = (
+    currentOrderIds?: number[],
+    currentOrderItemIds?: number[],
+): {
     options: CascaderProps["options"];
     loading: boolean;
+    onSearch: (value: string) => void;
 } => {
-    // Ebene 1: Orders laden
+    const [searchTerm, setSearchTerm] = useState<string>("");
+
+    // Filter für Orders aufbauen
+    const orderFilters = useMemo(() => {
+        const filters: any[] = [
+            { field: "bb_State", operator: "in", value: [ 1,2,3, 16] }, // nur aktive States
+        ];
+
+        return filters;
+    }, []);
+
+    // Ebene 1: Orders laden (letzte 500)
     const { data: ordersData, isLoading: loadingOrders } = useList<Order>({
         resource: "app_orders",
-        pagination: { mode: "off" },
-        filters: [
-            { field: "bb_State", operator: "in", value: [1,2,3,4,16] },
-        ],
+        pagination: { 
+            current: 1, 
+            pageSize: 500
+        },
+        filters: orderFilters,
+        sorters: [{ field: "created_at", order: "desc" }],
         meta: {
-            select: "*, app_customers!fk_app_customers_id(bb_Name)",
+            select: "*, app_customers(bb_Name)",
         },
     });
 
-    // Ebene 2: Items laden
-    const { data: itemsData, isLoading: loadingItems } =
-        useList<OrderItem>({
-            resource: "app_order_items",
-            pagination: { mode: "off" },
-            filters: [
-                { field: "bb_InvoiceSKU", operator: "contains", value: "Sonder" },
-            ],
-            meta: {
-                select: "*, app_products(bb_sku, bb_name), app_order_item_attributes(bb_Name, bb_Value)",
-            },
-        });
+    // Fallback: Bereits verknüpfte Orders laden, falls nicht in der Liste
+    const { data: currentOrdersData, isLoading: loadingCurrentOrders } = useList<Order>({
+        resource: "app_orders",
+        pagination: { mode: "off" },
+        filters: currentOrderIds && currentOrderIds.length > 0
+            ? [{ field: "id", operator: "in", value: currentOrderIds }]
+            : [],
+        meta: {
+            select: "*, app_customers(bb_Name)",
+        },
+        queryOptions: {
+            enabled: !!currentOrderIds && currentOrderIds.length > 0,
+        },
+    });
 
-    // Transformation ohne React-State
-    const options = buildOptions(ordersData?.data, itemsData?.data);
+    // Orders zusammenführen
+    const mergedOrders = useMemo(() => {
+        const orders = ordersData?.data ?? [];
+        const currentOrders = currentOrdersData?.data ?? [];
+        
+        const existingIds = new Set(orders.map(o => o.id));
+        const additionalOrders = currentOrders.filter(o => !existingIds.has(o.id));
+        
+        return [...additionalOrders, ...orders];
+    }, [ordersData?.data, currentOrdersData?.data]);
+
+    // Order-IDs für Item-Abfrage sammeln
+    const orderIds = useMemo(
+        () => mergedOrders.map(o => o.id).filter((id): id is number => id !== undefined),
+        [mergedOrders]
+    );
+
+    // Ebene 2: Items laden - NUR für die geladenen Orders (max 500 Orders)
+    const { data: itemsData, isLoading: loadingItems } = useList<OrderItem>({
+        resource: "app_order_items",
+        pagination: { mode: "off" },
+        filters: [
+            { field: "fk_app_orders_id", operator: "in", value: orderIds },
+        ],
+        meta: {
+            select: "*, app_orders(bb_InvoiceDate), app_products(bb_sku, bb_name), app_order_item_attributes(bb_Name, bb_Value)",
+        },
+        queryOptions: {
+            enabled: orderIds.length > 0,
+        },
+    });
+
+    // Fallback: Bereits verknüpfte Items laden, falls nicht in der Liste
+    const { data: currentItemsData, isLoading: loadingCurrentItems } = useList<OrderItem>({
+        resource: "app_order_items",
+        pagination: { mode: "off" },
+        filters: currentOrderItemIds && currentOrderItemIds.length > 0
+            ? [{ field: "id", operator: "in", value: currentOrderItemIds }]
+            : [],
+        meta: {
+            select: "*, app_products(bb_sku, bb_name), app_order_item_attributes(bb_Name, bb_Value)",
+        },
+        queryOptions: {
+            enabled: !!currentOrderItemIds && currentOrderItemIds.length > 0,
+        },
+    });
+
+    // Items zusammenführen
+    const mergedItems = useMemo(() => {
+        const items = itemsData?.data ?? [];
+        const currentItems = currentItemsData?.data ?? [];
+        
+        const existingIds = new Set(items.map(i => i.id));
+        const additionalItems = currentItems.filter(i => !existingIds.has(i.id));
+        
+        return [...additionalItems, ...items];
+    }, [itemsData?.data, currentItemsData?.data]);
+
+    // Cascader Options bauen
+    const options = useMemo(
+        () => buildOptions(mergedOrders, mergedItems),
+        [mergedOrders, mergedItems]
+    );
+
+    const handleSearch = (value: string) => {
+        setSearchTerm(value);
+    };
 
     return {
         options,
-        loading: loadingOrders || loadingItems,
+        loading: loadingOrders || loadingItems || loadingCurrentOrders || loadingCurrentItems,
+        onSearch: handleSearch,
     };
 };

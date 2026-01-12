@@ -6,7 +6,7 @@ import { Card, Table } from "antd";
 export default function ZugehoerigeWareneingänge({ orderId }: { orderId: string }) {
     const { tableProps } = useTable({
         resource: "app_inbound_shipment_items",
-        meta: { select: "*, app_inbound_shipments(id, inbound_number, fk_bb_supplier, status, arrived_at, delivery_note_no)" },
+        meta: { select: "*, app_inbound_shipments(id, inbound_number, fk_bb_supplier, status, delivered_at, delivery_note_no)" },
         filters: { initial: [{ field: "order_id", operator: "eq", value: orderId }], mode: "server" },
         pagination: { pageSize: 10 },
         syncWithLocation: false,
@@ -28,7 +28,7 @@ export default function ZugehoerigeWareneingänge({ orderId }: { orderId: string
                 }}
             />
             <Table.Column dataIndex={["app_inbound_shipments", "delivery_note_no"]} title="Lieferscheinnummer" />
-            <Table.Column dataIndex={["app_inbound_shipments", "arrived_at"]} title="Eingangsdatum"  sorter />
+            <Table.Column dataIndex={["app_inbound_shipments", "delivered_at"]} title="Eingangsdatum"  sorter />
         </Table>
     </Card>
   );

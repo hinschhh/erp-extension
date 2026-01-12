@@ -11,7 +11,7 @@ export default function PageAuftragÜbersicht() {
     const { tableProps } = useTable<Orders>({
         resource: "app_orders",
         meta: { select: "*, app_customers(*)" },
-        pagination: { pageSize: 100 },
+        pagination: { mode: "off" },
         filters: { mode: "server" },
         sorters: { initial:[{field:"bb_CreatedAt", order:"desc"}],mode: "server" },
     });

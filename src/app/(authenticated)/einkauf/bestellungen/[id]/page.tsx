@@ -109,46 +109,38 @@ export default function ViewPurchaseOrderPage() {
     const sumFurniture = (itemsNormal ?? []).filter(item => item.app_products?.inventory_cagtegory === "Möbel").reduce((acc, item) => {
       const qty = typeof item.qty_ordered === "string" ? Number(item.qty_ordered) : item.qty_ordered;
       const unit = typeof item.unit_price_net === "string" ? Number(item.unit_price_net) : item.unit_price_net;
-      const shippingCost = typeof item.shipping_costs_proportional === "string" ? Number(item.shipping_costs_proportional) : item.shipping_costs_proportional;
-      return acc + qty * unit + shippingCost;
+      return acc + qty * unit;
     }, 0) + (itemsSpecial ?? []).filter(item => item.billbee_product.inventory_cagtegory === "Möbel").reduce((acc, item) => {
       const qty = typeof item.qty_ordered === "string" ? Number(item.qty_ordered) : item.qty_ordered;
       const unit = typeof item.unit_price_net === "string" ? Number(item.unit_price_net) : item.unit_price_net;
-      const shippingCost = typeof item.shipping_costs_proportional === "string" ? Number(item.shipping_costs_proportional) : item.shipping_costs_proportional;
-      return acc + qty * unit + shippingCost;
+      return acc + qty * unit;
     }, 0);
     const sumTradeGoods = (itemsNormal ?? []).filter(item => item.app_products?.inventory_cagtegory === "Handelswaren").reduce((acc, item) => {
       const qty = typeof item.qty_ordered === "string" ? Number(item.qty_ordered) : item.qty_ordered;
       const unit = typeof item.unit_price_net === "string" ? Number(item.unit_price_net) : item.unit_price_net;
-      const shippingCost = typeof item.shipping_costs_proportional === "string" ? Number(item.shipping_costs_proportional) : item.shipping_costs_proportional;
-      return acc + qty * unit + shippingCost;
+      return acc + qty * unit;
     }, 0) + (itemsSpecial ?? []).filter(item => item.billbee_product.inventory_cagtegory === "Handelswaren").reduce((acc, item) => {
       const qty = typeof item.qty_ordered === "string" ? Number(item.qty_ordered) : item.qty_ordered;
       const unit = typeof item.unit_price_net === "string" ? Number(item.unit_price_net) : item.unit_price_net;
-      const shippingCost = typeof item.shipping_costs_proportional === "string" ? Number(item.shipping_costs_proportional) : item.shipping_costs_proportional;
-      return acc + qty * unit + shippingCost;
+      return acc + qty * unit;
     }, 0);
     const sumParts = (itemsNormal ?? []).filter(item => item.app_products?.inventory_cagtegory === "Bauteile").reduce((acc, item) => {
       const qty = typeof item.qty_ordered === "string" ? Number(item.qty_ordered) : item.qty_ordered;
       const unit = typeof item.unit_price_net === "string" ? Number(item.unit_price_net) : item.unit_price_net;
-      const shippingCost = typeof item.shipping_costs_proportional === "string" ? Number(item.shipping_costs_proportional) : item.shipping_costs_proportional;
-      return acc + qty * unit + shippingCost;
+      return acc + qty * unit;
     }, 0) + (itemsSpecial ?? []).filter(item => item.billbee_product.inventory_cagtegory === "Bauteile").reduce((acc, item) => {
       const qty = typeof item.qty_ordered === "string" ? Number(item.qty_ordered) : item.qty_ordered;
       const unit = typeof item.unit_price_net === "string" ? Number(item.unit_price_net) : item.unit_price_net;
-      const shippingCost = typeof item.shipping_costs_proportional === "string" ? Number(item.shipping_costs_proportional) : item.shipping_costs_proportional;
-      return acc + qty * unit + shippingCost;
+      return acc + qty * unit;
     }, 0);
     const sumStones = (itemsNormal ?? []).filter(item => item.app_products?.inventory_cagtegory === "Naturstein").reduce((acc, item) => {
       const qty = typeof item.qty_ordered === "string" ? Number(item.qty_ordered) : item.qty_ordered;
       const unit = typeof item.unit_price_net === "string" ? Number(item.unit_price_net) : item.unit_price_net;
-      const shippingCost = typeof item.shipping_costs_proportional === "string" ? Number(item.shipping_costs_proportional) : item.shipping_costs_proportional;
-      return acc + qty * unit + shippingCost;
+      return acc + qty * unit;
     }, 0) + (itemsSpecial ?? []).filter(item => item.billbee_product.inventory_cagtegory === "Naturstein").reduce((acc, item) => {
       const qty = typeof item.qty_ordered === "string" ? Number(item.qty_ordered) : item.qty_ordered;
       const unit = typeof item.unit_price_net === "string" ? Number(item.unit_price_net) : item.unit_price_net;
-      const shippingCost = typeof item.shipping_costs_proportional === "string" ? Number(item.shipping_costs_proportional) : item.shipping_costs_proportional;
-      return acc + qty * unit + shippingCost;
+      return acc + qty * unit;
     }, 0);
     const sumInventoryCategories = [sumFurniture, sumTradeGoods, sumParts, sumStones];
     const fullyDeliveredAt = uniqueInboundShipments.reduce<

@@ -71,7 +71,7 @@ export function PoPositionsSpecialShowList({ items, title }: Props) {
                         </Space>
                         <Space direction="vertical" size={2} style={{ width: "100%" }}>
                             <Typography.Text type="secondary" style={{ display: "block" }} ellipsis>
-                                {item.base_model?.supplier_sku ?? "supplier_sku fehlt"}
+                                {item.supplier_sku ?? "supplier_sku fehlt"}
                             </Typography.Text>
                             <Typography.Text type="secondary" style={{ display: "block" }} ellipsis>
                                 {item.details_override ?? "details_override fehlen"}
@@ -87,7 +87,7 @@ export function PoPositionsSpecialShowList({ items, title }: Props) {
                     <Col span={3}>
                         <Space direction="vertical" align="end">
                             <Typography.Text style={{textAlign: "end"}}>{formatQty(qtySafe)} x {formatEUR(unitSafe)}</Typography.Text>
-                            <Typography.Text type="secondary" style={{textAlign: "end", fontSize:"90%"}}>COGS: {formatEUR(unitSafe + (item.shipping_costs_proportional ?? 0)/(qtySafe))}</Typography.Text>
+                            <Typography.Text type="secondary" style={{textAlign: "end", fontSize:"90%"}}>COGS: {formatEUR(unitSafe)}</Typography.Text>
                         </Space>
                     </Col>
                     <Col span={3} style={{ textAlign: "end", whiteSpace: "nowrap" }}>

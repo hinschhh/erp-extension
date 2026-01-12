@@ -114,8 +114,8 @@ const ACCOUNTS: {
   account_name: string;
   counter_part: string;
 }[] = [
-  { category_key: "Möbel", origin_key: "DE", account_number: "3400", account_name: "Wareneingang Möbel 19%", counter_part: "3980" },
-  { category_key: "Möbel", origin_key: "EU", account_number: "3425", account_name: "EU - Wareneingang Möbel - I.g.E. 19% VSt./USt.", counter_part: "3980" },
+  { category_key: "Möbel", origin_key: "DE", account_number: "3400", account_name: "Wareneingang Moebel 19%", counter_part: "3980" },
+  { category_key: "Möbel", origin_key: "EU", account_number: "3425", account_name: "EU - Wareneingang Moebel - I.g.E. 19% VSt./USt.", counter_part: "3980" },
   { category_key: "Möbel", origin_key: "Drittland", account_number: "noch nicht angelegt", account_name: "noch nicht angelegt", counter_part: "3980" },
 
   { category_key: "Handelswaren", origin_key: "DE", account_number: "3401", account_name: "Wareneingang Handelswaren 19%", counter_part: "3981" },
@@ -197,8 +197,8 @@ const calculateMaterialCost = (item: OrderItem): number => {
   const sku = product.bb_sku ?? "";
   const quantity = getOrderItemQuantity(item);
 
-  // 4. Special product (Sonderbestellung)
-  if (sku.startsWith("Sonderbestellung")) {
+  // 4. Special product (Sonder)
+  if (sku.startsWith("Sonder")) {
     const specialPositions = item.app_purchase_orders_positions_special ?? [];
     if (specialPositions.length > 0) {
       const specialPrice = Number(specialPositions[0]?.unit_price_net ?? 0);
@@ -312,6 +312,7 @@ export default function MonatsabschlussPage() {
     return [
       { field: "app_orders.bb_InvoiceDate", operator: "gte", value: start.toISOString() },
       { field: "app_orders.bb_InvoiceDate", operator: "lte", value: end.toISOString() },
+      { field: "is_active", operator: "eq", value: true }
     ];
   }, [range]);
 
@@ -481,11 +482,61 @@ export default function MonatsabschlussPage() {
     return [...goodsRows, ...ankRows].filter((r) => Math.abs(r.betrag) >= 0.000001);
   };
 
+  const buildWarenausgangExportRows = (): ExportRow[] => {
+    const endDate = range?.[1] ? range[1].format("DD.MM.YYYY") : dayjs().format("DD.MM.YYYY");
+    const titlePrefix = `Warenausgang (BuBu) - ${endDate} Monatsabschluss - `;
+
+    // Group costs by category
+    const costsByCategory = new Map<string, number>();
+
+    for (const item of orderItems) {
+      const category = getOrderItemInventoryCategory(item);
+      if (!category || category === "Kein Inventar") continue; // Skip service items
+
+      const cost = calculateMaterialCost(item);
+      costsByCategory.set(category, (costsByCategory.get(category) ?? 0) + cost);
+    }
+
+    const rows: ExportRow[] = [];
+
+    // Create export rows for each category
+    for (const cat of CATEGORY_KEYS) {
+      const categoryTotal = costsByCategory.get(cat.key) ?? 0;
+      if (Math.abs(categoryTotal) < 0.000001) continue;
+
+      // Find the counter_part (inventory account) for this category
+      const account = ACCOUNTS.find((a) => a.category_key === cat.key && a.origin_key === "DE");
+      if (!account) continue;
+
+      const amount = -Number(categoryTotal); // Negative for expense
+      const bezeichnung = `Warenausgang ${cat.label}`;
+
+      rows.push({
+        bezeichnung,
+        betrag: amount,
+        gegenkonto: account.counter_part, // Inventory account (e.g., 3980, 3981, etc.)
+        rechnungsnummer: "",
+        versanddatum: endDate,
+        konto: "5000", // COGS account - adjust as needed
+        buchungstext: `${titlePrefix}${bezeichnung}`,
+      });
+    }
+
+    return rows.filter((r) => Math.abs(r.betrag) >= 0.000001);
+  };
+
   const handleExport = () => {
     const rows = buildExportRows();
     const csv = toCSV(rows);
     const endDate = range?.[1] ? range[1].format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD");
     downloadTextFile(`monatsabschluss-wareneingang-${endDate}.csv`, csv);
+  };
+
+  const handleWarenausgangExport = () => {
+    const rows = buildWarenausgangExportRows();
+    const csv = toCSV(rows);
+    const endDate = range?.[1] ? range[1].format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD");
+    downloadTextFile(`monatsabschluss-warenausgang-${endDate}.csv`, csv);
   };
 
   // --- Panels: Shipment -> Items (für eine gegebene Menge categoryItems je Shipment) ---
@@ -626,7 +677,7 @@ export default function MonatsabschlussPage() {
             <strong>{customerName}</strong>
             <span>
               {shippedAt} –{" "}
-              <Link href={`/kundenberatung/auftraege/anzeigen/${orderId}`}>Auftrag {orderNumber}</Link>
+              <Link href={`/kundenberatung/auftrag/${orderId}`}>Auftrag {orderNumber}</Link>
             </span>
             <Typography.Text type="secondary">{formatCurrencyEUR(orderTotal)}</Typography.Text>
           </Space>
@@ -747,16 +798,18 @@ export default function MonatsabschlussPage() {
       </Space>
 
       <Tabs
-        tabBarExtraContent={
-          <Button onClick={handleExport} type="primary">
-            Export
-          </Button>
-        }
         items={[
           {
             key: "inbound_shipments",
             label: "Wareneingang",
-            children: <Collapse items={itemsCategoryCollapse} />,
+            children: (
+              <Space direction="vertical" style={{ width: "100%" }}>
+                <Collapse items={itemsCategoryCollapse} />
+                <Button onClick={handleExport} type="primary" block>
+                  Wareneingang Export
+                </Button>
+              </Space>
+            ),
           },
           {
             key: "outbound_shipments",
@@ -786,7 +839,7 @@ export default function MonatsabschlussPage() {
                             return (
                               <li key={item.id}>
                                 <strong>{sku}</strong> in{" "}
-                                <Link href={`/kundenberatung/auftraege/anzeigen/${orderId}`}>
+                                <Link href={`/kundenberatung/auftrag/${orderId}`}>
                                   Auftrag {orderNumber}
                                 </Link>
                                 {" "}({customerName})
@@ -806,6 +859,9 @@ export default function MonatsabschlussPage() {
                   />
                 )}
                 <Collapse items={itemsWarenausgangCollapse} />
+                <Button onClick={handleWarenausgangExport} type="primary" block>
+                  Warenausgang Export
+                </Button>
               </Space>
             ),
           },
