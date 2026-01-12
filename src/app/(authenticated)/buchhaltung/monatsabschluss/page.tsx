@@ -18,7 +18,7 @@ type InboundShipment = Tables<"app_inbound_shipments"> & {
   app_inbound_shipment_items?:
     | (Tables<"app_inbound_shipment_items"> & {
         app_purchase_orders_positions_normal?: {
-          shipping_costs_proportional?: number | null;
+          portional?: number | null;
           unit_price_net?: number | null;
           app_products?: {
             inventory_cagtegory?: string | null;

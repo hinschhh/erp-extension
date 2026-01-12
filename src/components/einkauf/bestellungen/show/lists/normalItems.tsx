@@ -80,7 +80,7 @@ export function PoPositionsNormalShowList({ items, title }: Props) {
                     <Col span={3}>
                       <Space direction="vertical" align="end">
                           <Typography.Text style={{textAlign: "end"}}>{formatQty(qtySafe)} x {formatEUR(unitSafe)}</Typography.Text>
-                          <Typography.Text type="secondary" style={{textAlign: "end", fontSize:"90%"}}>COGS: {formatEUR(unitSafe + (item.shipping_costs_proportional ?? 0)/(qtySafe))}</Typography.Text>
+                          <Typography.Text type="secondary" style={{textAlign: "end", fontSize:"90%"}}>COGS: {formatEUR(unitSafe)}</Typography.Text>
                       </Space>
                     </Col>
                     <Col span={3} style={{ textAlign: "end", whiteSpace: "nowrap" }}>

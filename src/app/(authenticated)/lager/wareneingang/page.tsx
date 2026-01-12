@@ -67,13 +67,6 @@ return (
           // Basis: Preis * gelieferte Menge
           let amount = unit * qtyDelivered;
 
-          
-          const qtyOrdered = Number(pos?.qty_ordered ?? 0);
-          const shipTotal = Number(pos?.shipping_costs_proportional ?? 0);
-          if (qtyOrdered > 0) {
-            amount += shipTotal * (qtyDelivered / qtyOrdered);
-          }
-
           byInvoice.set(invoice, (byInvoice.get(invoice) ?? 0) + amount);
 
           totalAmount = totalAmount + amount;
