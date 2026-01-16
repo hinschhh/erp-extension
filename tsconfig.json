@@ -46,6 +46,7 @@
     "supabase/functions",
     "supabase/migrations",
     "supabase/seed",
-    "supabase/cli"
+    "supabase/cli",
+    "supabase/archive"
   ]
 }
