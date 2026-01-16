@@ -376,7 +376,7 @@ const toCSV = (rows: ExportRow[]) => {
     "Versanddatum",
     "Konto",
     "Buchungstext formatiert",
-  ].join("\t");
+  ].join(";");
 
   const lines = rows.map((r) =>
     [
@@ -387,7 +387,7 @@ const toCSV = (rows: ExportRow[]) => {
       r.versanddatum,
       r.konto,
       r.buchungstext,
-    ].join("\t"),
+    ].join(";"),
   );
 
   return [header, ...lines].join("\n");
@@ -627,7 +627,7 @@ export default function MonatsabschlussPage() {
       rows.push({
         bezeichnung,
         betrag: amount,
-        gegenkonto: account.counter_part,
+        gegenkonto: account.asset_account,
         rechnungsnummer: "",
         versanddatum: endDate,
         konto: account.account_number,
@@ -636,8 +636,8 @@ export default function MonatsabschlussPage() {
     }
 
     // 3) ANK (Anschaffungsnebenkosten) aus shipping_costs_proportional:
-    //    -> anteilig je Gegenkonto (counter_part)
-    const ankByCounterpart = new Map<string, number>();
+    //    -> anteilig je Bestandskonto (asset_account)
+    const ankByAssetAccount = new Map<string, number>();
 
     for (const [k, shipTotal] of Array.from(shippingByBucket.entries())) {
       if (!shipTotal || Math.abs(shipTotal) < 0.000001) continue;
@@ -646,10 +646,10 @@ export default function MonatsabschlussPage() {
       const account = ACCOUNTS.find((a) => a.category_key === category_key && a.origin_key === origin_key);
       if (!account) continue;
 
-      ankByCounterpart.set(account.counter_part, (ankByCounterpart.get(account.counter_part) ?? 0) + shipTotal);
+      ankByAssetAccount.set(account.asset_account, (ankByAssetAccount.get(account.asset_account) ?? 0) + shipTotal);
     }
 
-    for (const [counterPart, ankTotal] of Array.from(ankByCounterpart.entries())) {
+    for (const [assetAccount, ankTotal] of Array.from(ankByAssetAccount.entries())) {
       const amount = -Number(ankTotal);
       if (Math.abs(amount) < 0.000001) continue;
 
@@ -658,7 +658,7 @@ export default function MonatsabschlussPage() {
       rows.push({
         bezeichnung,
         betrag: amount,
-        gegenkonto: counterPart,
+        gegenkonto: assetAccount,
         rechnungsnummer: "",
         versanddatum: endDate,
         konto: "3800",
