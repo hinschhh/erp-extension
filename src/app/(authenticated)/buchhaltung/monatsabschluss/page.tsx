@@ -4,7 +4,8 @@ import { Show } from "@refinedev/antd";
 import type { CrudFilters } from "@refinedev/core";
 import { useList } from "@refinedev/core";
 import type { Tables } from "@/types/supabase";
-import { Alert, Button, Collapse, List, Space, Tabs, Typography } from "antd";
+import { Alert, Button, Card, Collapse, List, Space, Statistic, Tabs, Typography } from "antd";
+import { ArrowDownOutlined, ArrowUpOutlined } from "@ant-design/icons";
 import { LoadingFallback } from "@components/common/loading-fallback";
 import { DateRangeFilter, type RangeValue } from "@/components/common/filters/DateRangeFilter";
 import { formatCurrencyEUR, formatNumberDE, normalize } from "@utils/formats";
@@ -78,6 +79,7 @@ type OrderItem = Tables<"app_order_items"> & {
       billbee_component?: {
         bb_sku?: string | null;
         bb_net_purchase_price?: number | null;
+        inventory_cagtegory?: string | null;
       } | null;
     }[] | null;
   } | null;
@@ -92,6 +94,14 @@ type OrderItem = Tables<"app_order_items"> & {
       bb_Name?: string | null;
     } | null;
   } | null;
+};
+
+// Expanded order item for component-based grouping
+type ExpandedOrderItem = OrderItem & {
+  component_category?: string | null;
+  is_bom_component?: boolean;
+  component_sku?: string | null;
+  bom_sku?: string | null;
 };
 
 const CATEGORY_KEYS = [
@@ -113,22 +123,23 @@ const ACCOUNTS: {
   account_number: string;
   account_name: string;
   counter_part: string;
+  asset_account: string;
 }[] = [
-  { category_key: "Möbel", origin_key: "DE", account_number: "3400", account_name: "Wareneingang Moebel 19%", counter_part: "3980" },
-  { category_key: "Möbel", origin_key: "EU", account_number: "3425", account_name: "EU - Wareneingang Moebel - I.g.E. 19% VSt./USt.", counter_part: "3980" },
-  { category_key: "Möbel", origin_key: "Drittland", account_number: "noch nicht angelegt", account_name: "noch nicht angelegt", counter_part: "3980" },
+  { category_key: "Möbel", origin_key: "DE", account_number: "3400", account_name: "Wareneingang Moebel 19%", counter_part: "3960",  asset_account: "3980"},
+  { category_key: "Möbel", origin_key: "EU", account_number: "3425", account_name: "EU - Wareneingang Moebel - I.g.E. 19% VSt./USt.", counter_part: "3960", asset_account: "3980" },
+  { category_key: "Möbel", origin_key: "Drittland", account_number: "noch nicht angelegt", account_name: "noch nicht angelegt", counter_part: "3960", asset_account: "3980"},
 
-  { category_key: "Handelswaren", origin_key: "DE", account_number: "3401", account_name: "Wareneingang Handelswaren 19%", counter_part: "3981" },
-  { category_key: "Handelswaren", origin_key: "EU", account_number: "3426", account_name: "EU - Wareneingang Handelswaren - I.g.E. 19% VSt./U", counter_part: "3981" },
-  { category_key: "Handelswaren", origin_key: "Drittland", account_number: "noch nicht angelegt", account_name: "noch nicht angelegt", counter_part: "3981" },
+  { category_key: "Handelswaren", origin_key: "DE", account_number: "3401", account_name: "Wareneingang Handelswaren 19%", counter_part: "3961", asset_account: "3981" },
+  { category_key: "Handelswaren", origin_key: "EU", account_number: "3426", account_name: "EU - Wareneingang Handelswaren - I.g.E. 19% VSt./U", counter_part: "3961", asset_account: "3981" },
+  { category_key: "Handelswaren", origin_key: "Drittland", account_number: "noch nicht angelegt", account_name: "noch nicht angelegt", counter_part: "3961", asset_account: "3981" },
 
-  { category_key: "Bauteile", origin_key: "DE", account_number: "3402", account_name: "Wareneingang Bauteile 19%", counter_part: "3982" },
-  { category_key: "Bauteile", origin_key: "EU", account_number: "3427", account_name: "EU - Wareneingang Bauteile - I.g.E. 19% VSt./USt.", counter_part: "3982" },
-  { category_key: "Bauteile", origin_key: "Drittland", account_number: "noch nicht angelegt", account_name: "noch nicht angelegt", counter_part: "3982" },
+  { category_key: "Bauteile", origin_key: "DE", account_number: "3402", account_name: "Wareneingang Bauteile 19%", counter_part: "3962", asset_account: "3982" },
+  { category_key: "Bauteile", origin_key: "EU", account_number: "3427", account_name: "EU - Wareneingang Bauteile - I.g.E. 19% VSt./USt.", counter_part: "3962", asset_account: "3982" },
+  { category_key: "Bauteile", origin_key: "Drittland", account_number: "noch nicht angelegt", account_name: "noch nicht angelegt", counter_part: "3962", asset_account: "3982" },
 
-  { category_key: "Naturstein", origin_key: "DE", account_number: "3403", account_name: "Wareneingang Naturstein 19%", counter_part: "3983" },
-  { category_key: "Naturstein", origin_key: "EU", account_number: "3428", account_name: "EU - Wareneingang Naturstein -I.g.E. 19% VSt./USt.", counter_part: "3983" },
-  { category_key: "Naturstein", origin_key: "Drittland", account_number: "noch nicht angelegt", account_name: "noch nicht angelegt", counter_part: "3983" },
+  { category_key: "Naturstein", origin_key: "DE", account_number: "3403", account_name: "Wareneingang Naturstein 19%", counter_part: "3963", asset_account: "3983" },
+  { category_key: "Naturstein", origin_key: "EU", account_number: "3428", account_name: "EU - Wareneingang Naturstein -I.g.E. 19% VSt./USt.", counter_part: "3963", asset_account: "3983" },
+  { category_key: "Naturstein", origin_key: "Drittland", account_number: "noch nicht angelegt", account_name: "noch nicht angelegt", counter_part: "3963", asset_account: "3983" },
 ];
 
 // ---------------------- Helpers ----------------------
@@ -235,6 +246,101 @@ const calculateMaterialCost = (item: OrderItem): number => {
 const sumOrderItemCosts = (items: OrderItem[]): number =>
   items.reduce((acc, item) => acc + calculateMaterialCost(item), 0);
 
+/**
+ * Expand order items: BOM products are split into their components
+ * with their respective categories. Non-BOM products remain unchanged.
+ */
+const expandOrderItems = (items: OrderItem[]): ExpandedOrderItem[] => {
+  const expanded: ExpandedOrderItem[] = [];
+
+  for (const item of items) {
+    const product = item.app_products;
+    if (!product) {
+      expanded.push({ 
+        ...item, 
+        component_category: null, 
+        is_bom_component: false,
+        component_sku: null,
+        bom_sku: null,
+      });
+      continue;
+    }
+
+    const recipes = product.bom_recipes ?? [];
+    const sku = product.bb_sku ?? "";
+
+    // Check if it's a BOM product (has recipes and not a special product)
+    const isBOM = recipes.length > 0 && !sku.startsWith("Sonder");
+
+    if (isBOM) {
+      // Split BOM into components
+      for (const recipe of recipes) {
+        const componentCategory = recipe.billbee_component?.inventory_cagtegory ?? null;
+        const componentSku = recipe.billbee_component?.bb_sku ?? null;
+        const componentQty = Number(recipe.quantity ?? 0);
+        const componentPrice = Number(recipe.billbee_component?.bb_net_purchase_price ?? 0);
+        const itemQty = Number(item.bb_Quantity ?? 0);
+        const componentCost = componentQty * componentPrice * itemQty;
+
+        // Only include if component has a category and cost > 0
+        if (componentCategory && componentCost > 0) {
+          expanded.push({
+            ...item,
+            component_category: componentCategory,
+            is_bom_component: true,
+            component_sku: componentSku,
+            bom_sku: sku,
+          });
+        }
+      }
+    } else {
+      // Normal product, antique, or special product
+      expanded.push({
+        ...item,
+        component_category: product.inventory_cagtegory ?? null,
+        is_bom_component: false,
+        component_sku: null,
+        bom_sku: null,
+      });
+    }
+  }
+
+  return expanded;
+};
+
+/**
+ * Calculate cost for an expanded order item.
+ * For BOM components, calculates the cost of that specific component.
+ */
+const calculateExpandedItemCost = (item: ExpandedOrderItem): number => {
+  const product = item.app_products;
+  if (!product) return 0;
+
+  const quantity = Number(item.bb_Quantity ?? 0);
+
+  // If it's a BOM component, calculate component-specific cost
+  if (item.is_bom_component) {
+    const recipes = product.bom_recipes ?? [];
+    const targetCategory = item.component_category;
+
+    // Sum costs of all components matching this category
+    const componentCost = recipes.reduce((acc, recipe) => {
+      const componentCategory = recipe.billbee_component?.inventory_cagtegory ?? null;
+      if (componentCategory === targetCategory) {
+        const componentQty = Number(recipe.quantity ?? 0);
+        const componentPrice = Number(recipe.billbee_component?.bb_net_purchase_price ?? 0);
+        return acc + (componentQty * componentPrice);
+      }
+      return acc;
+    }, 0);
+
+    return componentCost * quantity;
+  }
+
+  // For non-BOM items, use the original calculation
+  return calculateMaterialCost(item);
+};
+
 const getOriginBucketForShipment = (shipment: InboundShipment): OriginBucket => {
   const first = shipment.app_inbound_shipment_items?.[0] ?? null;
   const taxCountry = first?.app_purchase_orders?.app_suppliers?.tax_country;
@@ -316,6 +422,39 @@ export default function MonatsabschlussPage() {
     ];
   }, [range]);
 
+  const previousMonthFilters: CrudFilters = useMemo(() => {
+    const start = range?.[0];
+    const end = range?.[1];
+
+    if (!start || !end) return [];
+
+    const duration = end.diff(start, 'days');
+    const prevPeriodEnd = start.clone().subtract(1, 'day');
+    const prevPeriodStart = prevPeriodEnd.clone().subtract(duration, 'days');
+
+    return [
+      { field: "app_orders.bb_InvoiceDate", operator: "gte", value: prevPeriodStart.toISOString() },
+      { field: "app_orders.bb_InvoiceDate", operator: "lte", value: prevPeriodEnd.toISOString() },
+      { field: "is_active", operator: "eq", value: true }
+    ];
+  }, [range]);
+
+  const previousYearFilters: CrudFilters = useMemo(() => {
+    const start = range?.[0];
+    const end = range?.[1];
+
+    if (!start || !end) return [];
+
+    const prevYearStart = start.clone().subtract(1, 'year');
+    const prevYearEnd = end.clone().subtract(1, 'year');
+
+    return [
+      { field: "app_orders.bb_InvoiceDate", operator: "gte", value: prevYearStart.toISOString() },
+      { field: "app_orders.bb_InvoiceDate", operator: "lte", value: prevYearEnd.toISOString() },
+      { field: "is_active", operator: "eq", value: true }
+    ];
+  }, [range]);
+
   const {
     data: inboundShipments,
     isLoading: loadingInboundShipments,
@@ -344,7 +483,7 @@ export default function MonatsabschlussPage() {
     resource: "app_order_items",
     meta: {
       select:
-        "id, bb_Quantity, app_orders!inner(id, bb_InvoiceDate, bb_OrderNumber, app_customers(bb_Name)), app_products(bb_sku, inventory_cagtegory, is_antique, bb_net_purchase_price, bom_recipes!bom_recipes_billbee_bom_id_fkey(quantity, billbee_component:app_products!bom_recipes_billbee_component_id_fkey(bb_sku, bb_net_purchase_price))), app_purchase_orders_positions_special(unit_price_net)",
+        "id, bb_Quantity, app_orders!inner(id, bb_InvoiceDate, bb_OrderNumber, app_customers(bb_Name)), app_products(bb_sku, inventory_cagtegory, is_antique, bb_net_purchase_price, bom_recipes!bom_recipes_billbee_bom_id_fkey(quantity, billbee_component:app_products!bom_recipes_billbee_component_id_fkey(bb_sku, bb_net_purchase_price, inventory_cagtegory))), app_purchase_orders_positions_special(unit_price_net)",
     },
     pagination: { mode: "off" },
     filters: outboundFilters,
@@ -353,6 +492,36 @@ export default function MonatsabschlussPage() {
   });
 
   const orderItems: OrderItem[] = orderItemsData?.data ?? [];
+
+  const {
+    data: previousMonthData,
+  } = useList<OrderItem>({
+    resource: "app_order_items",
+    meta: {
+      select:
+        "id, app_orders!inner(id, bb_InvoiceDate), app_products(bb_sku)",
+    },
+    pagination: { mode: "off" },
+    filters: previousMonthFilters,
+    queryOptions: { keepPreviousData: true, enabled: previousMonthFilters.length > 0 },
+  });
+
+  const previousMonthItems: OrderItem[] = previousMonthData?.data ?? [];
+
+  const {
+    data: previousYearData,
+  } = useList<OrderItem>({
+    resource: "app_order_items",
+    meta: {
+      select:
+        "id, app_orders!inner(id, bb_InvoiceDate), app_products(bb_sku)",
+    },
+    pagination: { mode: "off" },
+    filters: previousYearFilters,
+    queryOptions: { keepPreviousData: true, enabled: previousYearFilters.length > 0 },
+  });
+
+  const previousYearItems: OrderItem[] = previousYearData?.data ?? [];
 
   // Data Quality Check: Validate ANK allocation
   const ankValidation = useMemo(() => {
@@ -393,6 +562,30 @@ export default function MonatsabschlussPage() {
     
     return issues;
   }, [orderItems]);
+
+  // Statistics: Count Sonder positions
+  const sonderStats = useMemo(() => {
+    const countSonder = (items: OrderItem[]) => 
+      items.filter(item => {
+        const sku = getOrderItemSku(item);
+        return sku.startsWith("Sonder");
+      }).length;
+
+    const current = countSonder(orderItems);
+    const prevMonth = countSonder(previousMonthItems);
+    const prevYear = countSonder(previousYearItems);
+
+    const monthChange = prevMonth > 0 ? ((current - prevMonth) / prevMonth) * 100 : 0;
+    const yearChange = prevYear > 0 ? ((current - prevYear) / prevYear) * 100 : 0;
+
+    return {
+      current,
+      prevMonth,
+      prevYear,
+      monthChange,
+      yearChange,
+    };
+  }, [orderItems, previousMonthItems, previousYearItems]);
 
   const buildExportRows = (): ExportRow[] => {
     const endDate = range?.[1] ? range[1].format("DD.MM.YYYY") : dayjs().format("DD.MM.YYYY");
@@ -486,14 +679,17 @@ export default function MonatsabschlussPage() {
     const endDate = range?.[1] ? range[1].format("DD.MM.YYYY") : dayjs().format("DD.MM.YYYY");
     const titlePrefix = `Warenausgang (BuBu) - ${endDate} Monatsabschluss - `;
 
-    // Group costs by category
+    // Expand BOM products into components
+    const expandedItems = expandOrderItems(orderItems);
+
+    // Group costs by component category
     const costsByCategory = new Map<string, number>();
 
-    for (const item of orderItems) {
-      const category = getOrderItemInventoryCategory(item);
+    for (const item of expandedItems) {
+      const category = item.component_category;
       if (!category || category === "Kein Inventar") continue; // Skip service items
 
-      const cost = calculateMaterialCost(item);
+      const cost = calculateExpandedItemCost(item);
       costsByCategory.set(category, (costsByCategory.get(category) ?? 0) + cost);
     }
 
@@ -514,10 +710,10 @@ export default function MonatsabschlussPage() {
       rows.push({
         bezeichnung,
         betrag: amount,
-        gegenkonto: account.counter_part, // Inventory account (e.g., 3980, 3981, etc.)
+        gegenkonto: account.counter_part, //Bestandsveränderungskonto(e.g., 3960, 3961, etc.)
         rechnungsnummer: "",
         versanddatum: endDate,
-        konto: "5000", // COGS account - adjust as needed
+        konto: account.asset_account, //Bestandskonto (e.g., 3980, 3981, etc.)
         buchungstext: `${titlePrefix}${bezeichnung}`,
       });
     }
@@ -649,9 +845,9 @@ export default function MonatsabschlussPage() {
   const itemsCategoryCollapse = CATEGORY_KEYS.map((c) => buildCategoryPanel(c.key));
 
   // ---------------------- Build Warenausgang Collapse Panels ----------------------
-  const buildWarenausgangOrderPanels = (categoryItems: OrderItem[]) => {
+  const buildWarenausgangOrderPanels = (categoryItems: ExpandedOrderItem[]) => {
     // Group items by order
-    const orderMap = new Map<number, OrderItem[]>();
+    const orderMap = new Map<number, ExpandedOrderItem[]>();
     
     for (const item of categoryItems) {
       const orderId = item.app_orders?.id;
@@ -665,7 +861,7 @@ export default function MonatsabschlussPage() {
 
     return Array.from(orderMap.entries()).map(([orderId, items]) => {
       const order = items[0]?.app_orders;
-      const orderTotal = sumOrderItemCosts(items);
+      const orderTotal = items.reduce((acc, item) => acc + calculateExpandedItemCost(item), 0);
       const shippedAt = order?.bb_InvoiceDate ? dayjs(order.bb_InvoiceDate).format("DD.MM.YYYY") : "--";
       const orderNumber = order?.bb_OrderNumber ?? orderId.toString();
       const customerName = order?.app_customers?.bb_Name ?? "Unbekannter Kunde";
@@ -686,16 +882,21 @@ export default function MonatsabschlussPage() {
           <List
             dataSource={items}
             renderItem={(item) => {
-              const sku = getOrderItemSku(item);
+              const sku = item.is_bom_component && item.component_sku 
+                ? item.component_sku 
+                : getOrderItemSku(item);
               const qty = getOrderItemQuantity(item);
-              const cost = calculateMaterialCost(item);
+              const cost = calculateExpandedItemCost(item);
               const unitCost = qty !== 0 ? cost / qty : 0;
+              const displaySku = item.is_bom_component && item.bom_sku
+                ? `${sku} (aus ${item.bom_sku})` 
+                : sku;
 
               return (
                 <List.Item>
                   <Space style={{ width: "100%", justifyContent: "space-between" }}>
                     <Space>
-                      <Typography.Text strong>{sku}</Typography.Text>
+                      <Typography.Text strong>{displaySku}</Typography.Text>
                       <Typography.Text>{qty} Stück</Typography.Text>
                       <Typography.Text>{formatCurrencyEUR(unitCost)} / Stück</Typography.Text>
                     </Space>
@@ -711,11 +912,12 @@ export default function MonatsabschlussPage() {
   };
 
   const buildWarenausgangCategoryPanel = (categoryKey: string) => {
-    const categoryItems = orderItems.filter((item) => getOrderItemInventoryCategory(item) === categoryKey);
+    const expandedItems = expandOrderItems(orderItems);
+    const categoryItems = expandedItems.filter((item) => item.component_category === categoryKey);
     
     if (categoryItems.length === 0) return null;
 
-    const categoryTotal = sumOrderItemCosts(categoryItems);
+    const categoryTotal = categoryItems.reduce((acc, item) => acc + calculateExpandedItemCost(item), 0);
     const categoryLabel = CATEGORY_KEYS.find((c) => c.key === categoryKey)?.label ?? categoryKey;
 
     return {
@@ -724,7 +926,7 @@ export default function MonatsabschlussPage() {
         <Space size={8}>
           <span>{categoryLabel}</span>
           <Typography.Text type="secondary">{formatCurrencyEUR(categoryTotal)}</Typography.Text>
-          <Typography.Text type="secondary">({categoryItems.length} Artikel)</Typography.Text>
+          <Typography.Text type="secondary">({categoryItems.length} Positionen)</Typography.Text>
         </Space>
       ),
       children: <Collapse items={buildWarenausgangOrderPanels(categoryItems)} />,
@@ -820,6 +1022,42 @@ export default function MonatsabschlussPage() {
               <Alert type="error" message="Fehler beim Laden der Warenausgänge" showIcon />
             ) : (
               <Space direction="vertical" style={{ width: "100%" }}>
+                {range?.[0] && range?.[1] && (
+                  <Card>
+                    <Space size="large" wrap>
+                      <Statistic 
+                        title="Sonder-Positionen (aktuell)" 
+                        value={sonderStats.current} 
+                      />
+                      <Statistic
+                        title="Vergleich zum Vorzeitraum"
+                        value={sonderStats.monthChange}
+                        precision={1}
+                        suffix="%"
+                        valueStyle={{ color: sonderStats.monthChange >= 0 ? '#3f8600' : '#cf1322' }}
+                        prefix={sonderStats.monthChange >= 0 ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
+                      />
+                      <Statistic
+                        title="Vorzeitraum absolut"
+                        value={sonderStats.prevMonth}
+                        valueStyle={{ fontSize: '16px' }}
+                      />
+                      <Statistic
+                        title="Vergleich zum Vorjahreszeitraum"
+                        value={sonderStats.yearChange}
+                        precision={1}
+                        suffix="%"
+                        valueStyle={{ color: sonderStats.yearChange >= 0 ? '#3f8600' : '#cf1322' }}
+                        prefix={sonderStats.yearChange >= 0 ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
+                      />
+                      <Statistic
+                        title="Vorjahreszeitraum absolut"
+                        value={sonderStats.prevYear}
+                        valueStyle={{ fontSize: '16px' }}
+                      />
+                    </Space>
+                  </Card>
+                )}
                 {zeroCostValidation.length > 0 && (
                   <Alert
                     type="warning"

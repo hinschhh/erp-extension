@@ -74,7 +74,7 @@ const resources: IResourceItem[] = [
     name: "app_suppliers",
     list: "/einkauf/lieferanten",
     create: "/einkauf/lieferanten/anlegen",
-    show: "/einkauf/lieferanten/anzeigen/:id",
+    show: "/einkauf/lieferanten/:id",
     edit: "/einkauf/lieferanten/bearbeiten/:id",
     parentName: "einkauf",
     options: { label: "Lieferanten" },

@@ -80,24 +80,18 @@ export default function EinkaufBestellpositionenNormalBearbeiten({
   console.log("RAW values from Form:", values);
 
   const path = values.order_item_cascader;
-
-  let fk_app_orders_id = null;
-  let fk_app_order_items_id = null;
-
-  if (Array.isArray(path) && path.length === 2) {
-    const [orderIdFromCascader, orderItemIdFromCascader] = path;
-    fk_app_orders_id = orderIdFromCascader;
-    fk_app_order_items_id = orderItemIdFromCascader;
-  }
-
+  
   // UI-Feld explizit *herausziehen* und wegwerfen
   const { order_item_cascader, ...rest } = values ?? {};
 
-  const payload = {
-    ...rest,
-    fk_app_orders_id,
-    fk_app_order_items_id,
-  };
+  const payload: any = { ...rest };
+
+  // Nur FKs setzen, wenn Cascader einen Wert hat
+  if (Array.isArray(path) && path.length === 2) {
+    const [orderIdFromCascader, orderItemIdFromCascader] = path;
+    payload.fk_app_orders_id = orderIdFromCascader;
+    payload.fk_app_order_items_id = orderItemIdFromCascader;
+  }
 
   console.log("CLEAN payload to Refine:", payload);
 

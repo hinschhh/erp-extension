@@ -25,10 +25,6 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
         onMutationSuccess: async () => {
             await Promise.all([
                 invalidate({
-                resource: "app_purchase_orders_positions_special_view", // <- VIEW!
-                invalidates: ["list", "many"],
-                }),
-                invalidate({
                 resource: "app_purchase_orders_positions_special",
                 invalidates: ["list", "many"],
                 }),
@@ -41,7 +37,7 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
 
     const { selectProps: selectPropsBaseModel } = useSelect<Produkte>({
         resource: "app_products",
-        optionLabel: "bb_sku",
+        optionLabel: (item) => `${item.bb_sku} - (${item.supplier_sku})`,
         optionValue: "id",
         sorters: [{ field: "bb_sku", order: "asc" }],
         filters: [{
@@ -54,11 +50,24 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
             operator: "ncontains",
             value: "Sonder",
         }],
+        meta: {
+            select: "id, bb_sku, supplier_sku",
+        },
+        onSearch: (value) => [
+            {
+                field: "bb_sku",
+                operator: "or",
+                value: [
+                    { field: "bb_sku", operator: "contains", value },
+                    { field: "supplier_sku", operator: "contains", value },
+                ],
+            },
+        ],
     });
 
     const { selectProps: selectPropsSpecial } = useSelect<Produkte>({
         resource: "app_products",
-        optionLabel: "bb_sku",
+        optionLabel: (item) => `${item.bb_sku} - (${item.supplier_sku})`,
         optionValue: "id",
         sorters: [{ field: "bb_sku", order: "asc" }],
         filters: [{
@@ -71,6 +80,19 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
             operator: "contains",
             value: "Sonder",
         }],
+        meta: {
+            select: "id, bb_sku, supplier_sku",
+        },
+        onSearch: (value) => [
+            {
+                field: "bb_sku",
+                operator: "or",
+                value: [
+                    { field: "bb_sku", operator: "contains", value },
+                    { field: "supplier_sku", operator: "contains", value },
+                ],
+            },
+        ],
     });
 
 

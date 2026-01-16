@@ -10,7 +10,7 @@ type InboundShipment = Tables<"app_inbound_shipments">;
 export default function InboundShipmentsListPage() {
 const {tableProps} = useTable<InboundShipment>({
   resource: "app_inbound_shipments",
-  meta: { select: "*, app_inbound_shipment_items(*, app_purchase_orders_positions_normal(unit_price_net, qty_ordered), app_purchase_orders_positions_special(unit_price_net, qty_ordered),  app_purchase_orders(invoice_number))" },
+  meta: { select: "*, app_inbound_shipment_items(*, app_purchase_orders_positions_normal(unit_price_net, qty_ordered), app_purchase_orders_positions_special(unit_price_net, qty_ordered),  app_purchase_orders(id, invoice_number, confirmation_number))" },
   sorters: { initial: [{ field: "created_at", order: "desc" }], mode: "server"  },
   filters: { initial: [], mode: "server" },
   pagination: { pageSize: 20 },
@@ -48,12 +48,16 @@ return (
       render={(_, record) => {
         const items = record?.app_inbound_shipment_items ?? [];
 
-        // Map: invoice_number -> Summe EUR
-        const byInvoice = new Map<string, number>();
+        
+        // Map: order_id -> { displayNumber, amount }
+        const byOrder = new Map<string, { displayNumber: string; amount: number }>();
         let totalAmount = 0;
 
         for (const it of items) {
-          const invoice = it?.app_purchase_orders?.invoice_number || "fehlt";
+          const orderId = it?.app_purchase_orders?.id || "unbekannt";
+          const displayNumber = it?.app_purchase_orders?.invoice_number 
+            || it?.app_purchase_orders?.confirmation_number 
+            || "fehlt";
 
           // Position (normal oder special)
           const pos =
@@ -67,16 +71,20 @@ return (
           // Basis: Preis * gelieferte Menge
           let amount = unit * qtyDelivered;
 
-          byInvoice.set(invoice, (byInvoice.get(invoice) ?? 0) + amount);
+          const existing = byOrder.get(orderId);
+          byOrder.set(orderId, {
+            displayNumber,
+            amount: (existing?.amount ?? 0) + amount,
+          });
 
           totalAmount = totalAmount + amount;
         }
 
 
 
-        // Sortiert und formatiert ausgeben
-        const entries = Array.from(byInvoice.entries()).sort(([a], [b]) =>
-          a.localeCompare(b, "de-DE")
+        // Sortiert nach displayNumber und formatiert ausgeben
+        const entries = Array.from(byOrder.values()).sort((a, b) =>
+          a.displayNumber.localeCompare(b.displayNumber, "de-DE")
         );
 
         if (!entries.length) return "—";
@@ -88,9 +96,9 @@ return (
               currency: "EUR",
               minimumFractionDigits: 2,
             })}</strong>
-            {entries.map(([inv, sum]) => (
-              <div key={inv}>
-                {`${inv}: ${sum.toLocaleString("de-DE", {
+            {entries.map(({ displayNumber, amount }) => (
+              <div key={displayNumber}>
+                {`${displayNumber}: ${amount.toLocaleString("de-DE", {
                   style: "currency",
                   currency: "EUR",
                   minimumFractionDigits: 2,

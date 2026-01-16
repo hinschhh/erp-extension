@@ -1,26 +1,49 @@
 "use client";
 
-import { useInvalidate, useOne } from "@refinedev/core";
+import { useCreateMany, useOne } from "@refinedev/core";
 import { useRouter } from "next/navigation";
 import { FolderOpenOutlined } from "@ant-design/icons";
-import { Button, Form, Select, Table, message } from "antd";
+import { Button, Form, Select, Table } from "antd";
 import { useModalForm, useSelect, useTable } from "@refinedev/antd";
 import Modal from "antd/es/modal/Modal";
 import { Tables } from "@/types/supabase";
 import { useEffect, useMemo, useState } from "react";
-import { supabaseBrowserClient } from "@/utils/supabase/client";
 
-type POItemsNormal = Omit<Tables<"app_purchase_orders_positions_normal_view">, "id"> & { id: string };
-type POItemsSpecial = Omit<Tables<"app_purchase_orders_positions_special_view">, "id"> & { id: string };
+type POItemsNormal = Tables<"app_purchase_orders_positions_normal">;
+type POItemsSpecial = Tables<"app_purchase_orders_positions_special">;
 
-export default function SelectPOOrderModal({ inboundShipmentId, inboundShipmentStatus, inboundShipmentSupplier }: { inboundShipmentId: string, inboundShipmentStatus: "planned" | "delivered" | "posted", inboundShipmentSupplier: string }) {
+/**
+ * Berechnet offene Menge und reichert Positionsdaten an
+ */
+function enrichPositionData(rows: readonly any[], receivedItemsKey: string) {
+  return rows.map((row) => {
+    const qtyOrdered = Number(row.qty_ordered ?? 0);
+    const items = row[receivedItemsKey] || [];
+    const qtyReceived = items.reduce(
+      (sum: number, item: any) => sum + Number(item.quantity_delivered || 0),
+      0
+    );
+    const qtyOpen = Math.max(qtyOrdered - qtyReceived, 0);
+
+    return { ...row, qty_received: qtyReceived, qty_open: qtyOpen };
+  });
+}
+
+export default function SelectPOOrderModal({
+  inboundShipmentId,
+  inboundShipmentStatus,
+  inboundShipmentSupplier,
+}: {
+  inboundShipmentId: string;
+  inboundShipmentStatus: "planned" | "delivered" | "posted";
+  inboundShipmentSupplier: string;
+}) {
   const [selectedNormalIds, setSelectedNormalIds] = useState<string[]>([]);
   const [selectedSpecialIds, setSelectedSpecialIds] = useState<string[]>([]);
 
-  const invalidate = useInvalidate();
   const router = useRouter();
 
-  const {data, isLoading, refetch} = useOne({
+  const { data: shipmentData } = useOne({
     resource: "app_inbound_shipments",
     id: inboundShipmentId,
     meta: { select: "id,status" },
@@ -33,202 +56,164 @@ export default function SelectPOOrderModal({ inboundShipmentId, inboundShipmentS
     warnWhenUnsavedChanges: false,
   });
 
+  const { mutate: createItems } = useCreateMany();
+
   const { selectProps: selectPropsPO } = useSelect({
     resource: "app_purchase_orders",
     optionLabel: (item) => {
-      const dateLabel = item.ordered_at ? new Date(item.ordered_at).toLocaleDateString() : "kein Datum";
-      const supplier = item.supplier ?? "unbekannt";
-      const invoice = item.invoice_number ?? "—";
-      return `${item.order_number ?? "ohne Nummer"} - (${supplier} - ${invoice}) vom ${dateLabel}`;
+      const date = item.ordered_at ? new Date(item.ordered_at).toLocaleDateString() : "kein Datum";
+      return `${item.order_number ?? "ohne Nummer"} - (${item.supplier ?? "unbekannt"} - ${item.invoice_number ?? "—"}) vom ${date}`;
     },
     sorters: [{ field: "ordered_at", order: "desc" }],
     filters: [
-      {
-
-        field: "ordered_at",
-        operator: "nnull",
-        value: null,
-      },
-      {
-
-        field: "status",
-        operator: "ne",
-        value: "delivered",
-      },
-      {
-        field: "supplier",
-        operator: "eq",
-        value: inboundShipmentSupplier,
-      }
+      { field: "ordered_at", operator: "nnull", value: null },
+      { field: "status", operator: "ne", value: "delivered" },
+      { field: "supplier", operator: "eq", value: inboundShipmentSupplier },
     ],
     onSearch: (value) => [
-    { field: "order_number", operator: "contains", value: `%${value}%` },
-    { field: "supplier", operator: "contains", value: `%${value}%` },
-    { field: "invoice_number", operator: "contains", value: `%${value}%` },
-  ],
-  meta: { or: true },
+      {
+        field: "multi-filter",
+        operator: "or",
+        value: [
+          { field: "order_number", operator: "contains", value: `%${value}%` },
+          { field: "supplier", operator: "contains", value: `%${value}%` },
+          { field: "invoice_number", operator: "contains", value: `%${value}%` },
+        ],
+      },
+    ],
+    meta: { or: true },
   });
 
   const orderId: string | null = Form.useWatch("order_id", form);
-  const status: "planned" | "delivered" | "posted" = inboundShipmentStatus;
 
+  // Zentrale Query: Normale Positionen mit Produkt-Info und bereits gelieferten Items
   const { tableProps: tablePropsNormal } = useTable<POItemsNormal>({
-    resource: "app_purchase_orders_positions_normal_view",
+    resource: "app_purchase_orders_positions_normal",
     filters: {
       mode: "server",
-      permanent: [
-        { field: "order_id", operator: "eq", value: orderId },
-        { field: "qty_open", operator: "gt", value: 0 },
-      ],
+      permanent: [{ field: "order_id", operator: "eq", value: orderId }],
     },
-    meta: { select: "id, order_id, qty_open, qty_ordered, app_products(bb_sku)" },
-    queryOptions: {
-      enabled: !!orderId,
+    meta: {
+      select:
+        "id, order_id, qty_ordered, billbee_product_id, app_products!billbee_product_id(bb_sku), app_inbound_shipment_items!po_item_normal_id(quantity_delivered)",
     },
+    queryOptions: { enabled: !!orderId },
   });
 
+  // Zentrale Query: Sonderpositionen mit allen Produkt-Infos und bereits gelieferten Items
   const { tableProps: tablePropsSpecial } = useTable<POItemsSpecial>({
-    resource: "app_purchase_orders_positions_special_view",
+    resource: "app_purchase_orders_positions_special",
     filters: {
       mode: "server",
-      permanent: [
-        { field: "order_id", operator: "eq", value: orderId },
-        { field: "qty_open", operator: "gt", value: 0 },
-      ],
+      permanent: [{ field: "order_id", operator: "eq", value: orderId }],
     },
-    sorters: { initial: [{ field: "internal_notes", order: "asc" }] },
-    meta: { select: "*, base_model:app_products!app_purchase_orders_positions_base_model_billbee_product_i_fkey(bb_sku, supplier_sku, purchase_details), special_product:app_products!app_purchase_orders_positions_special_billbee_product_id_fkey(bb_sku)" },
-    queryOptions: {
-      enabled: !!orderId,
+    meta: {
+      select:
+        "id, order_id, qty_ordered, supplier_sku, internal_notes, order_confirmation_ref, base_product:app_products!base_model_billbee_product_id(bb_sku), special_product:app_products!billbee_product_id(bb_sku), app_inbound_shipment_items!po_item_special_id(quantity_delivered)",
     },
+    queryOptions: { enabled: !!orderId },
   });
 
+  // Reichere Daten mit berechneten Feldern an
+  const enrichedNormalData = useMemo(
+    () => enrichPositionData(tablePropsNormal?.dataSource ?? [], "app_inbound_shipment_items"),
+    [tablePropsNormal?.dataSource]
+  );
 
-  const orderIdVal: string | null = orderId ?? null;
+  const enrichedSpecialData = useMemo(
+    () => enrichPositionData(tablePropsSpecial?.dataSource ?? [], "app_inbound_shipment_items"),
+    [tablePropsSpecial?.dataSource]
+  );
 
-  // OPTIONAL: Beim Laden einer Bestellung alle offenen Positionen automatisch vorselektieren
-  /* eslint-disable react-hooks/set-state-in-effect */
+  // Auto-select alle offenen Positionen beim Laden einer Bestellung
   useEffect(() => {
-    if (!orderIdVal) {
+    if (!orderId) {
       setSelectedNormalIds([]);
       return;
     }
-    const rows = (tablePropsNormal?.dataSource as any[] | undefined) ?? [];
-    const ids = rows.map((r) => String(r.id));
+    const ids = enrichedNormalData.map((r) => String(r.id));
     setSelectedNormalIds(ids);
-  }, [orderIdVal, tablePropsNormal?.dataSource]);
+  }, [orderId, enrichedNormalData]);
 
   useEffect(() => {
-    if (!orderIdVal) {
+    if (!orderId) {
       setSelectedSpecialIds([]);
       return;
     }
-    const rows = (tablePropsSpecial?.dataSource as any[] | undefined) ?? [];
-    const ids = rows.map((r) => String(r.id));
+    const ids = enrichedSpecialData.map((r) => String(r.id));
     setSelectedSpecialIds(ids);
-  }, [orderIdVal, tablePropsSpecial?.dataSource]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  }, [orderId, enrichedSpecialData]);
 
   const handleSave = async () => {
-    const supabase = supabaseBrowserClient;
-
-    if (!inboundShipmentId) {
-      message.error("Keine Inbound-Shipment-ID übergeben.");
-      return;
-    }
-
     const vals = await form.validateFields().catch(() => null);
-    if (!vals) return;
+    if (!vals || !orderId) return;
+    if (!selectedNormalIds.length && !selectedSpecialIds.length) return;
 
-    if (!orderIdVal) {
-      message.warning("Bitte zuerst eine Bestellung auswählen.");
-      return;
-    }
-    if (!selectedNormalIds.length && !selectedSpecialIds.length) {
-      message.warning("Bitte mindestens eine Position (normal oder Sonderposition) auswählen.");
-      return;
-    }
+    // Erstelle Payload aus ausgewählten Positionen
+    const createPayload = (
+      ids: string[],
+      data: any[],
+      poItemKey: "po_item_normal_id" | "po_item_special_id"
+    ) =>
+      ids
+        .map((id) => {
+          const row = data.find((r) => String(r.id) === id);
+          if (!row || row.qty_open <= 0) return null;
+          return {
+            shipment_id: inboundShipmentId,
+            order_id: orderId,
+            [poItemKey]: id,
+            [poItemKey === "po_item_normal_id" ? "po_item_special_id" : "po_item_normal_id"]: null,
+            quantity_delivered: row.qty_open,
+            item_status: inboundShipmentStatus,
+          };
+        })
+        .filter(Boolean);
 
-    const normalRows = (tablePropsNormal?.dataSource as any[] | undefined) ?? [];
-    const specialRows = (tablePropsSpecial?.dataSource as any[] | undefined) ?? [];
-    const mapByIdNormal = new Map<string, any>(normalRows.map((r) => [String(r.id), r]));
-    const mapByIdSpecial = new Map<string, any>(specialRows.map((r) => [String(r.id), r]));
+    const allItems = [
+      ...createPayload(selectedNormalIds, enrichedNormalData, "po_item_normal_id"),
+      ...createPayload(selectedSpecialIds, enrichedSpecialData, "po_item_special_id"),
+    ].filter((item): item is NonNullable<typeof item> => item !== null);
 
-    // Offene Menge automatisch übernehmen
-    const rowsNormal = selectedNormalIds.map((id) => {
-      const row = mapByIdNormal.get(String(id));
-      const qty = Number(row?.qty_open ?? 0);
-      return {
-        shipment_id: inboundShipmentId,
-        order_id: row?.order_id ?? orderIdVal,
-        po_item_normal_id: id,
-        po_item_special_id: null,
-        quantity_delivered: qty, // <-- automatisch offene Menge
-        item_status: status,
-      };
-    });
-    const rowsSpecial = selectedSpecialIds.map((id) => {
-      const row = mapByIdSpecial.get(String(id));
-      const qty = Number(row?.qty_open ?? 0);
-      return {
-        shipment_id: inboundShipmentId,
-        order_id: row?.order_id ?? orderIdVal,
-        po_item_normal_id: null,
-        po_item_special_id: id,
-        quantity_delivered: qty, // <-- automatisch offene Menge
-        item_status: status,
-      };
-    });
+    if (allItems.length === 0) return;
 
-    // 0-Mengen rausfiltern (Sicherheit)
-    const payloadNormal = rowsNormal.filter((r) => r.quantity_delivered > 0);
-    const payloadSpecial = rowsSpecial.filter((r) => r.quantity_delivered > 0);
-
-    const { error: errorNormal } = await supabase.from("app_inbound_shipment_items").insert(payloadNormal as any);
-    if (errorNormal) {
-      message.error(`Speichern fehlgeschlagen: ${errorNormal.message}`);
-      return;
-    }
-
-    const { error: errorSpecial } = await supabase.from("app_inbound_shipment_items").insert(payloadSpecial as any);
-    if (errorSpecial) {
-      message.error(`Speichern fehlgeschlagen: ${errorSpecial.message}`);
-      return;
-    }
-
-    invalidate({
-        invalidates: ["list", "many", "detail"], // sicherheitshalber breit
+    createItems(
+      {
         resource: "app_inbound_shipment_items",
-    });
-    invalidate({ invalidates: ["list", "many", "detail"], resource: "app_purchase_orders_positions_normal_view" });
-    invalidate({ invalidates: ["list", "many", "detail"], resource: "app_purchase_orders_positions_special_view" });
-
-// wenn du App Router/Suspense nutzt:
-router.refresh();
-
-    message.success("Wareneingang-Positionen gespeichert.");
-    setSelectedNormalIds([]);
-    setSelectedSpecialIds([]);
-    modalProps?.onCancel?.(undefined as any);
+        values: allItems,
+        successNotification: { message: "Wareneingang-Positionen gespeichert", type: "success" },
+        errorNotification: { message: "Speichern fehlgeschlagen", type: "error" },
+      },
+      {
+        onSuccess: () => {
+          router.refresh();
+          setSelectedNormalIds([]);
+          setSelectedSpecialIds([]);
+          modalProps?.onCancel?.(undefined as any);
+        },
+      }
+    );
   };
+
+  const isPosted = shipmentData?.data?.status === "posted";
 
   return (
     <>
-      {data?.data?.status !== "posted" && (
-        <Button onClick={() => show()} icon={<FolderOpenOutlined />}>
-          Bestellung wählen
-        </Button>
-      )}
-      {data?.data?.status === "posted" && (
-        <Button onClick={() => show()} icon={<FolderOpenOutlined />} disabled>
-          Bestellung wählen
-        </Button>
-      )}
+      <Button
+        onClick={() => show()}
+        icon={<FolderOpenOutlined />}
+        disabled={isPosted}
+      >
+        Bestellung wählen
+      </Button>
       <Modal
         {...modalProps}
         title="Gelieferte Positionen auswählen"
         footer={[
-          <Button key="cancel" onClick={() => modalProps?.onCancel?.(undefined as any)}>
+          <Button
+            key="cancel"
+            onClick={() => modalProps?.onCancel?.(undefined as any)}
+          >
             Abbrechen
           </Button>,
           <Button key="save" type="primary" onClick={handleSave}>
@@ -236,17 +221,31 @@ router.refresh();
           </Button>,
         ]}
       >
-        <Form {...formProps} form={form} layout="vertical" initialValues={{ selected_normal_ids: [] }}>
+        <Form
+          {...formProps}
+          form={form}
+          layout="vertical"
+          initialValues={{ selected_normal_ids: [] }}
+        >
           <Form.Item name="order_id" label="Bestellung auswählen" required>
-            <Select {...selectPropsPO} placeholder="Bestellung auswählen" filterOption={(input, option) => {
-              return typeof option?.label === "string" && option.label.toLowerCase().includes(input.toLowerCase());
-            }} />
+            <Select
+              {...selectPropsPO}
+              placeholder="Bestellung auswählen"
+              filterOption={(input, option) => {
+                return (
+                  typeof option?.label === "string" &&
+                  option.label.toLowerCase().includes(input.toLowerCase())
+                );
+              }}
+            />
           </Form.Item>
           <Form.Item>
             <h4>Normale Positionen der Bestellung</h4>
             <Table
               rowKey="id"
-              {...tablePropsNormal}
+              dataSource={enrichedNormalData}
+              loading={!!orderId && tablePropsNormal.loading}
+              pagination={tablePropsNormal.pagination}
               rowSelection={{
                 type: "checkbox",
                 selectedRowKeys: selectedNormalIds,
@@ -261,31 +260,32 @@ router.refresh();
               <Table.Column title="Bestellte Menge" dataIndex="qty_ordered" />
             </Table>
           </Form.Item>
-            <Form.Item>
+          <Form.Item>
             <h4>Sonderpositionen der Bestellung</h4>
             <Table
               rowKey="id"
-              {...tablePropsSpecial}
+              dataSource={enrichedSpecialData}
+              loading={!!orderId && tablePropsSpecial.loading}
+              pagination={tablePropsSpecial.pagination}
               rowSelection={{
                 type: "checkbox",
                 selectedRowKeys: selectedSpecialIds,
-                onChange: (keys) => {
-                  setSelectedSpecialIds(keys as string[]);
-                },
+                onChange: (keys) => setSelectedSpecialIds(keys as string[]),
                 preserveSelectedRowKeys: true,
               }}
             >
-              <Table.Column title="SKU" dataIndex={["special_product", "bb_sku"]} render={(value, record) => {
-                return (
-                <span>
+              <Table.Column
+                title="SKU"
+                render={(_, record: any) => (
+                  <span>
                     <strong>{`${record.supplier_sku ?? "—"} - `}</strong>
-                    <strong>{record.internal_notes ? `${record.internal_notes}` : ""}</strong>
-                    {record.order_confirmation_ref ? ` (${record.order_confirmation_ref}) – ` : ""}
-                    <strong>{`${record.base_model?.bb_sku ?? "—"}`}</strong>
-                    {value ? ` (${value})` : ""}
-                </span>
-                );
-              }}/>
+                    <strong>{record.internal_notes || ""}</strong>
+                    {record.order_confirmation_ref && ` (${record.order_confirmation_ref}) – `}
+                    <strong>{record.base_product?.bb_sku ?? "—"}</strong>
+                    {record.special_product?.bb_sku && ` (${record.special_product.bb_sku})`}
+                  </span>
+                )}
+              />
               <Table.Column title="Offene Menge" dataIndex="qty_open" />
               <Table.Column title="Bestellte Menge" dataIndex="qty_ordered" />
             </Table>

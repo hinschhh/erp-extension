@@ -52,22 +52,20 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
       });
       const handleFinish: typeof formProps.onFinish = (values: any) => {
         const path = values.order_item_cascader;
+        
+        // UI-Feld explizit *herausziehen* und wegwerfen
+        const { order_item_cascader, ...rest } = values ?? {};
 
+        const payload: any = { ...rest };
+
+        // Nur FKs setzen, wenn Cascader einen Wert hat
         if (Array.isArray(path) && path.length === 2) {
-          const [orderId, orderItemId] = path;
-
-          values.fk_app_orders_id = orderId;
-          values.fk_app_order_items_id = orderItemId;
-        } else {
-          // Wenn nichts gewählt wurde, optional FK auf null setzen
-          values.fk_app_orders_id = null;
-          values.fk_app_order_items_id = null;
+          const [orderIdFromCascader, orderItemIdFromCascader] = path;
+          payload.fk_app_orders_id = orderIdFromCascader;
+          payload.fk_app_order_items_id = orderItemIdFromCascader;
         }
 
-        // Technisches UI-Feld rauswerfen (muss nicht in der DB landen)
-        delete values.order_item_cascader;
-
-        return formProps.onFinish?.(values);
+        return formProps.onFinish?.(payload);
       };
 
     

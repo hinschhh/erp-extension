@@ -15,8 +15,14 @@ export default function EinkaufsBestellungenÜbersicht() {
 
 
   const { tableProps, sorters, filters, setFilters } = useTable<Po>({
-    resource: "app_purchase_orders_view",
-    meta: { select: "*" },
+    resource: "app_purchase_orders",
+    meta: { 
+      select: `
+        *,
+        positions_normal:app_purchase_orders_positions_normal(qty_ordered, unit_price_net),
+        positions_special:app_purchase_orders_positions_special(qty_ordered, unit_price_net)
+      `
+    },
     sorters: { initial: [{ field: "created_at", order: "desc" }], mode: "server" },
     filters: { mode: "server" },
     pagination: { pageSize: 20 },
@@ -101,7 +107,15 @@ export default function EinkaufsBestellungenÜbersicht() {
               </Space> : "-";            
           }}
           />
-          <Table.Column title="Summe" dataIndex="total_amount_net" sorter render={(value, _) => formatCurrencyEUR(value)}/>
+          <Table.Column title="Summe" dataIndex="total_amount_net" sorter render={(_, record: any) => {
+            const normalTotal = (record.positions_normal || []).reduce((sum: number, pos: any) => 
+              sum + (Number(pos.qty_ordered) * Number(pos.unit_price_net)), 0
+            );
+            const specialTotal = (record.positions_special || []).reduce((sum: number, pos: any) => 
+              sum + (Number(pos.qty_ordered) * Number(pos.unit_price_net)), 0
+            );
+            return formatCurrencyEUR(normalTotal + specialTotal);
+          }}/>
           <Table.Column title="Unbestätigte Skizzen" dataIndex="sketch_unconfirmed_cnt" sorter render={(value, _) => {
             if (value && value > 0) {
               return value;
@@ -111,9 +125,9 @@ export default function EinkaufsBestellungenÜbersicht() {
           <Table.Column title="Anmerkungen" dataIndex="notes" render={(value) => <Typography.Paragraph ellipsis={{ rows: 5, expandable: true, symbol: 'mehr' }}>{value}</Typography.Paragraph>  } />
           <Table.Column title="Aktionen" dataIndex="actions" render={(_, record) => (
             <Space>
-              <ShowButton resource="app_purchase_orders" hideText size="small" recordItemId={record.order_id} />
-              <EditButton resource="app_purchase_orders" hideText size="small" recordItemId={record.order_id} />
-              <DeleteButton resource="app_purchase_orders" hideText size="small" recordItemId={record.order_id} disabled={!(record.status === "draft" || record.status === "ordered")} />
+              <ShowButton hideText size="small" recordItemId={record.id} />
+              <EditButton hideText size="small" recordItemId={record.id} />
+              <DeleteButton hideText size="small" recordItemId={record.id} disabled={!(record.status === "draft" || record.status === "ordered")} />
             </Space>
           )} />
         </Table>

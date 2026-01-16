@@ -61,8 +61,6 @@ export default function InboundPostAndDispatchButton({
       // Relevante Ressourcen invalidieren
       invalidate({ resource: "app_inbound_shipments", invalidates: ["list", "detail"] });
       invalidate({ resource: "app_inbound_shipment_items", invalidates: ["list"] });
-      invalidate({ resource: "app_purchase_orders_positions_normal_view", invalidates: ["list"] });
-      invalidate({ resource: "app_purchase_orders_positions_special_view", invalidates: ["list"] });
     } catch (e: any) {
       console.error(e);
       message.error(e?.message ?? "Fehler beim Posten des Wareneingangs");

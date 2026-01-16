@@ -20,10 +20,6 @@ export default function ButtonEinkaufBestellpositionenNormalHinzufuegen({orderId
         onMutationSuccess: async () => {
             await Promise.all([
                 invalidate({
-                resource: "app_purchase_orders_positions_normal_view", // <- VIEW!
-                invalidates: ["list", "many"],
-                }),
-                invalidate({
                 resource: "app_purchase_orders_positions_normal",
                 invalidates: ["list", "many"],
                 }),
@@ -35,7 +31,7 @@ export default function ButtonEinkaufBestellpositionenNormalHinzufuegen({orderId
 
     const { selectProps } = useSelect<Produkte>({
         resource: "app_products",
-        optionLabel: "bb_sku",
+        optionLabel: (item) => `${item.bb_sku} - (${item.supplier_sku})`,
         optionValue: "id",
         sorters: [{ field: "bb_sku", order: "asc" }],
         filters: [{
@@ -43,6 +39,19 @@ export default function ButtonEinkaufBestellpositionenNormalHinzufuegen({orderId
             operator: "in",
             value: [supplier, "Verschiedene"],
         }],
+        meta: {
+            select: "id, bb_sku, supplier_sku",
+        },
+        onSearch: (value) => [
+            {
+                field: "bb_sku",
+                operator: "or",
+                value: [
+                    { field: "bb_sku", operator: "contains", value },
+                    { field: "supplier_sku", operator: "contains", value },
+                ],
+            },
+        ],
     });
 
    
@@ -80,7 +89,12 @@ export default function ButtonEinkaufBestellpositionenNormalHinzufuegen({orderId
                             name="billbee_product_id"
                             noStyle
                         >        
-                            <Select {...selectProps} style={{ minWidth: 220 }} />
+                            <Select 
+                                {...selectProps} 
+                                style={{ minWidth: 220 }} 
+                                showSearch
+                                filterOption={false}
+                            />
                         </Form.Item>
                             <Button onClick={ausArtikelKopieren}>Aus Artikel kopieren</Button>
                     </Flex>

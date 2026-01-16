@@ -78,7 +78,7 @@ export default function InboundShipmentCreatePage() {
             </Form.Item>
           </Col>
           <Col span={8}>
-            <Form.Item name="delivery_note_no" label="Lieferscheinnummer" required>
+            <Form.Item name="delivery_note_number" label="Lieferscheinnummer" required>
               <Input placeholder="Lieferscheinnummer eingeben" />
             </Form.Item>
           </Col>

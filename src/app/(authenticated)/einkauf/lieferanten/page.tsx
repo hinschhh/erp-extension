@@ -1,6 +1,6 @@
 "use client";
 
-import { CreateButton, DeleteButton, EditButton, List, useTable } from "@refinedev/antd";
+import { CreateButton, DeleteButton, EditButton, List, Show, ShowButton, useTable } from "@refinedev/antd";
 import { Tables } from "@/types/supabase";
 import { Input, Space, Table } from "antd";
 
@@ -29,6 +29,7 @@ export default function LieferantenPage() {
             <Table.Column dataIndex="default_leadtime_days" title="Lieferzeit in Tagen" />
             <Table.Column title="Aktionen" dataIndex="actions" render={(_, record) => (
                 <Space>
+                    <ShowButton hideText size="small" recordItemId={record.id} />
                     <EditButton hideText size="small" recordItemId={record.id} />
                     <DeleteButton hideText size="small" recordItemId={record.id} />
                 </Space>

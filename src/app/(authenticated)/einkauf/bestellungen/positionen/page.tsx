@@ -11,7 +11,7 @@ export default function Page() {
     const { options, loading } = useOrderItemCascader();
 
     const { tableProps, formProps, isEditing, saveButtonProps, editButtonProps, cancelButtonProps } = useEditableTable({
-        resource: "app_purchase_orders_positions_special_view",
+        resource: "app_purchase_orders_positions_special",
         pagination: { pageSize: 50 },
         sorters: { initial: [{ field: "created_at", order: "desc" }] },
         meta: {

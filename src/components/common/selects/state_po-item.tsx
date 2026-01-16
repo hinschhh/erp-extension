@@ -11,7 +11,7 @@ type Props = Omit<SelectProps<Value>, "options" | "onChange" | "value"> & {
   onChange?: (value: Value | null) => void;
 };
 
-const disabledStatuses = ["draft", "ordered", "confirmed", "in_production", "partially_delivered", "delivered"];
+const disabledStatuses = ["draft"];
 
 export default function SelectStatePoItem({ value, onChange, ...props }: Props) {
   const options = Object.entries(statusMap ?? {}).map(([val, cfg]) => ({
