@@ -81,11 +81,18 @@ export default function InboundShipmentsList({itemsNormal, itemsSpecial, title}:
                             </Space>
                                 
                         </Col>
-                        <Col span={12}>
+                        <Col span={9}>
                             <Space direction="horizontal" align="end">
                                 {!!!item.app_purchase_orders?.confirmation_number ? <></> : (<Tag color="geekblue"><strong>{item.app_purchase_orders?.confirmation_number ?? "--"}</strong></Tag>)}
                                 <ISStatusTag status={item.item_status as string || ""} />
                             </Space>                        
+                        </Col>
+                        <Col span={3}>
+                            <Space direction="vertical" align="end">
+                                <Typography.Text style={{textAlign: "end"}}>
+                                    {formatEUR((item.app_purchase_orders_positions_normal?.unit_price_net ?? 0) * (item.quantity_delivered ?? 0))}
+                                </Typography.Text>
+                            </Space>
                         </Col>
                         <Col span={3}>
                             <Space direction="vertical" align="end">
@@ -125,7 +132,7 @@ export default function InboundShipmentsList({itemsNormal, itemsSpecial, title}:
                             </Space>
                                 
                         </Col>
-                        <Col span={12}>
+                        <Col span={9}>
                             <Space direction="horizontal" align="end">
                                 {!!!item.app_purchase_orders?.confirmation_number ? <></> : (<Tag color="geekblue"><strong>{item.app_purchase_orders?.confirmation_number ?? "--"}</strong></Tag>)}
                                 <ISStatusTag status={item.item_status as string || ""} />
@@ -139,6 +146,13 @@ export default function InboundShipmentsList({itemsNormal, itemsSpecial, title}:
                                 {item.quantity_delivered < (item.app_purchase_orders_positions_special?.qty_ordered ?? 0) && (
                                     <Tag color={"orange"}>Teillieferung</Tag>
                                 )}
+                            </Space>
+                        </Col>
+                        <Col span={3}>
+                            <Space direction="vertical" align="end">
+                                <Typography.Text style={{textAlign: "end"}}>
+                                    {formatEUR((item.app_purchase_orders_positions_special?.unit_price_net ?? 0) * (item.quantity_delivered ?? 0))}
+                                </Typography.Text>
                             </Space>
                         </Col>
                     </Row>
