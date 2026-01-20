@@ -1,10 +1,11 @@
 "use client";
 
-import { Collapse, Table, Radio, Space } from "antd";
+import { Collapse, Table, Radio, Space, Button, Typography } from "antd";
 import { useTable } from "@refinedev/antd";
 import { Tables } from "@/types/supabase";
 import { render } from "react-dom";
 import { useState } from "react";
+import { DownloadOutlined } from "@ant-design/icons";
 
 type Stock = Tables<"app_stocks">;
 type StockLocation = Tables<"app_stock_locations">;
@@ -29,6 +30,65 @@ export default function InventurPruefenPage() {
       select: "id, bb_sku, supplier_sku, inventory_cagtegory, bb_is_active, is_antique, bb_is_bom, is_variant_set, product_type, bb_net_purchase_price, app_inventory_counts(*, app_stocks(*), app_stock_locations(*)), app_inventory_snapshots(*, app_stocks(*))",
     },
   });
+
+  // CSV-Export Funktion
+  const handleExportCSV = () => {
+    const dataToExport = showOnlyDifferences ? filteredProducts : products;
+    
+    // CSV Header
+    const headers = [
+      "BB SKU",
+      "Inventurkategorie",
+      "Gezählte Menge",
+      "Gezählte Menge (nicht verkaufbar)",
+      "Zählbestand (gesamt)",
+      "Systembestand",
+      "Differenz",
+      "Differenz (Wert)"
+    ];
+    
+    // CSV Rows
+    const rows = dataToExport.map(product => {
+      const qtySellable = product.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + (c.qty_sellable || 0), 0) || 0;
+      const qtyUnsellable = product.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + (c.qty_unsellable || 0), 0) || 0;
+      const qtyTotal = qtySellable + qtyUnsellable;
+      const systemStock = product.app_inventory_snapshots?.reduce((acc: number, c: InventorySnapshot) => acc + ((c.bb_stock_current || 0) + (c.bb_unfullfilled_amount || 0)), 0) || 0;
+      const difference = qtyTotal - systemStock;
+      const purchasePrice = Number(product.bb_net_purchase_price) || 0;
+      const differenceValue = difference * purchasePrice;
+      
+      return [
+        product.bb_sku || "",
+        product.inventory_cagtegory || "",
+        qtySellable,
+        qtyUnsellable,
+        qtyTotal,
+        systemStock,
+        difference,
+        differenceValue.toFixed(2)
+      ];
+    });
+    
+    // CSV String erstellen
+    const csvContent = [
+      headers.join(";"),
+      ...rows.map(row => row.join(";"))
+    ].join("\n");
+    
+    // BOM für UTF-8 hinzufügen (für korrekte Darstellung in Excel)
+    const BOM = "\uFEFF";
+    const blob = new Blob([BOM + csvContent], { type: "text/csv;charset=utf-8;" });
+    
+    // Download auslösen
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `inventur_pruefung_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   
 
@@ -81,16 +141,19 @@ export default function InventurPruefenPage() {
         
         const items = sortedStocks.map(([stockId, data]) => {
             // Nach Lagerort (stock_location) gruppieren
-            const locationsMap = new Map<string, { qtySellable: number; qtyUnsellable: number; systemStock: number }>();
+            const locationsMap = new Map<string, { qtySellable: number; qtyUnsellable: number; systemStock: number; notes: string[] }>();
             
             data.counts.forEach(count => {
                 const locationName = count.app_stock_locations?.name || 'Kein Lagerort';
                 if (!locationsMap.has(locationName)) {
-                    locationsMap.set(locationName, { qtySellable: 0, qtyUnsellable: 0, systemStock: 0 });
+                    locationsMap.set(locationName, { qtySellable: 0, qtyUnsellable: 0, systemStock: 0, notes: [] });
                 }
                 const locationData = locationsMap.get(locationName)!;
                 locationData.qtySellable += count.qty_sellable || 0;
                 locationData.qtyUnsellable += count.qty_unsellable || 0;
+                if (count.note && count.note.trim()) {
+                    locationData.notes.push(count.note.trim());
+                }
             });
             
             // Aggregierte Werte für das gesamte Lager berechnen
@@ -124,15 +187,23 @@ export default function InventurPruefenPage() {
                         values.qtySellable > 0 || 
                         values.qtyUnsellable > 0
                     )
-                    .map(([location, values]) => ({
-                        key: location,
-                        location: `  ${location}`,
-                        qtySellable: values.qtySellable,
-                        qtyUnsellable: values.qtyUnsellable,
-                        qtyTotal: values.qtySellable + values.qtyUnsellable,
-                        systemStock: values.systemStock,
-                        difference: (values.qtySellable + values.qtyUnsellable) - values.systemStock,
-                    }))
+                    .map(([location, values]) => {
+                        const noteText = values.notes.length > 0 ? values.notes.join(' | ') : '';
+                        return {
+                            key: location,
+                            location: (
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <Typography.Text>{`  ${location}`}</Typography.Text>
+                                    {noteText && <Typography.Text type="secondary" style={{ fontSize: '0.85em', marginLeft: '8px' }}>{`Anmerkung: ${noteText}`}</Typography.Text>}
+                                </div>
+                            ),
+                            qtySellable: values.qtySellable,
+                            qtyUnsellable: values.qtyUnsellable,
+                            qtyTotal: values.qtySellable + values.qtyUnsellable,
+                            systemStock: values.systemStock,
+                            difference: (values.qtySellable + values.qtyUnsellable) - values.systemStock,
+                        };
+                    })
             ];
             
             const nestedColumns = [
@@ -276,6 +347,13 @@ export default function InventurPruefenPage() {
             <Radio.Button value={false}>Alle Produkte</Radio.Button>
             <Radio.Button value={true}>Nur mit Differenz</Radio.Button>
           </Radio.Group>
+          <Button 
+            type="primary" 
+            icon={<DownloadOutlined />}
+            onClick={handleExportCSV}
+          >
+            CSV Export
+          </Button>
         </Space>
         <Table 
           {...tableProps}
