@@ -528,7 +528,7 @@ export default function MonatsabschlussPage() {
     const issues: { shipment: InboundShipment; header: number; calculated: number; diff: number }[] = [];
     
     for (const shipment of shipments) {
-      const headerANK = Number(shipment.shipping_cost_separate ?? 0);
+      const headerANK = Number(shipment.shipping_cost ?? 0);
       const allItems: ISI[] = shipment.app_inbound_shipment_items ?? [];
       const calculatedANK = sumShipping(allItems);
       const diff = Math.abs(headerANK - calculatedANK);
