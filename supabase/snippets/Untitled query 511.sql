@@ -1,0 +1,2 @@
+ALTER TABLE public.app_inbound_shipment_items
+ENABLE TRIGGER trg_ai__propagate_po_shipping_to_shipment;

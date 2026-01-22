@@ -15,7 +15,7 @@ export default function SupplierCreatePage() {
   return (
     <Create title="Lieferant anlegen" saveButtonProps={saveButtonProps}>
       <Form layout="vertical" {...formProps} initialValues={{ default_currency:"EUR", active:true }}>
-        <Form.Item label="Name" name="name" rules={[{required:true}]}><Input/></Form.Item>
+        <Form.Item label="Name" name="id" rules={[{required:true}]}><Input/></Form.Item>
         <Form.Item label="Kürzel" name="short_code"><Input maxLength={10}/></Form.Item>
         <Form.Item label="E-Mail" name="email"><Input type="email"/></Form.Item>
         <Form.Item label="Telefon" name="phone"><Input/></Form.Item>

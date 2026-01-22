@@ -153,7 +153,7 @@ export default function ViewPurchaseOrderPage() {
                         <Space direction="horizontal" size={1}><strong>Geliefert am: </strong> {(!!!shipment?.delivered_at) ? "--" : <DateField format={"DD.MM.YYYY"} value={shipment?.delivered_at ?? undefined} />}</Space>
                         <Typography.Text type="secondary">Rechnung: <Link href={shipment?.invoice_file_url ?? "--"}>{shipment?.invoice_number}</Link></Typography.Text>
                         <Typography.Text type="secondary">Lieferschein: <Link href={shipment?.delivery_note_file_url ?? "--"}>{shipment?.delivery_note_number}</Link></Typography.Text>
-                        <Typography.Text type="secondary">Lieferkosten (separat): {shipment?.shipping_cost_separate === 0 ? "--" : formatCurrencyEUR(shipment?.shipping_cost_separate)}</Typography.Text>
+                        <Typography.Text type="secondary">Lieferkosten (separat): {shipment?.shipping_cost === 0 ? "--" : formatCurrencyEUR(shipment?.shipping_cost)}</Typography.Text>
                     </Space>
                 </Card>
                 <Card title="Anmerkungen" style={{ marginTop: 8}}>

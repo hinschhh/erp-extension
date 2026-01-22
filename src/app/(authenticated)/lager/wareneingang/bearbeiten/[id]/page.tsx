@@ -381,7 +381,7 @@ export default function InboundShipmentEditPage() {
               <Form.Item name="shipping_cost_invoice_number" label="Rechnungsnummer (Lieferkosten)">
                 <Input placeholder="Rechnungsnummer eingeben" style={{ width: "100%" }} />
               </Form.Item>
-              <Form.Item name="shipping_cost_separate" label="Lieferkosten separate Rechnung">
+              <Form.Item name="shipping_cost" label="Lieferkosten">
                 <InputNumber placeholder="Betrag" addonAfter="€" step={0.01} style={{ width: "100%" }} />
               </Form.Item>
               <div style={{ marginBottom: 24, textAlign: "left" }}>

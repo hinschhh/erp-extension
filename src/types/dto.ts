@@ -6,7 +6,7 @@ export type InboundShipmentHeaderDTO = {
     delivery_note_number: string | null;
     note: string | null;
     arrived_at?: string; //ISO
-    shipping_cost_separate?: number | null;
+    shipping_cost?: number | null;
 }
 
 export type InboundShipmentDetailNormalDTO = {

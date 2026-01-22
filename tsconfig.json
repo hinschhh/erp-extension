@@ -43,10 +43,10 @@
   "exclude": [
     "node_modules",
     ".next",
-    "supabase/functions",
-    "supabase/migrations",
-    "supabase/seed",
-    "supabase/cli",
-    "supabase/archive"
+    "archive-supabase/functions",
+    "archive-supabase/migrations",
+    "archive-supabase/seed",
+    "archive-supabase/cli",
+    "archive-supabase/archive"
   ]
 }
