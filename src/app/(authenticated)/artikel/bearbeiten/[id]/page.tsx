@@ -28,6 +28,7 @@ import type { HttpError } from "@refinedev/core";
 import { supabaseBrowserClient } from "@/utils/supabase/client";
 import { Data } from "@dnd-kit/core";
 import App from "next/app";
+import { useParams } from "next/navigation";
 
 /* ---------- Typen ---------- */
 type AppProduct = Tables<"app_products">;
@@ -81,12 +82,14 @@ const UsedInImageCell: React.FC<{ id: number; alt?: string; size?: number }> = (
 };
 
 export default function ArtikelEditPage({ params }: { params: { id: string } }) {
-  const id = params.id;
+  const id = useParams().id as string;
   const idNum = Number(id);
   const hasNumericId = Number.isFinite(idNum);
   const router = useRouter();
   const { open: notify } = useNotification();
   const [saving, setSaving] = React.useState(false);
+
+  console.log("Render ArtikelEditPage", { id, idNum, hasNumericId });
 
   /* ---------- Produkt laden (app_products) ---------- */
   const { queryResult } = useShow<AppProduct, HttpError>({
