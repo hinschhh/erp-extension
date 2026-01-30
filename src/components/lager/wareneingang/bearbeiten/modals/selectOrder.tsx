@@ -62,11 +62,12 @@ export default function SelectPOOrderModal({
     resource: "app_purchase_orders",
     optionLabel: (item) => {
       const date = item.ordered_at ? new Date(item.ordered_at).toLocaleDateString() : "kein Datum";
-      return `${item.order_number ?? "ohne Nummer"} - (${item.supplier ?? "unbekannt"} - ${item.invoice_number ?? "—"}) vom ${date}`;
+      return `${item.order_number ?? "ohne Nummer"} - (${item.supplier ?? "unbekannt"} - ${item.confirmation_number ?? "—"}) vom ${date}`;
     },
-    sorters: [{ field: "ordered_at", order: "desc" }],
+    sorters: [{ field: "ordered_at", order: "asc" }],
     filters: [
       { field: "ordered_at", operator: "nnull", value: null },
+      { field: "confirmation_number", operator: "nnull", value: null },
       { field: "status", operator: "ne", value: "delivered" },
       { field: "supplier", operator: "eq", value: inboundShipmentSupplier },
     ],
@@ -78,10 +79,14 @@ export default function SelectPOOrderModal({
           { field: "order_number", operator: "contains", value: `%${value}%` },
           { field: "supplier", operator: "contains", value: `%${value}%` },
           { field: "invoice_number", operator: "contains", value: `%${value}%` },
+          { field: "confirmation_number", operator: "contains", value: `%${value}%` },
         ],
       },
     ],
-    meta: { or: true },
+    meta: { 
+      select: "id, order_number, ordered_at, supplier, confirmation_number, invoice_number, status",
+      or: true 
+    },
   });
 
   const orderId: string | null = Form.useWatch("order_id", form);
@@ -231,12 +236,8 @@ export default function SelectPOOrderModal({
             <Select
               {...selectPropsPO}
               placeholder="Bestellung auswählen"
-              filterOption={(input, option) => {
-                return (
-                  typeof option?.label === "string" &&
-                  option.label.toLowerCase().includes(input.toLowerCase())
-                );
-              }}
+              showSearch
+              filterOption={false}
             />
           </Form.Item>
           <Form.Item>

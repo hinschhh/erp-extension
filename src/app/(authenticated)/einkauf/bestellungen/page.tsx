@@ -91,7 +91,7 @@ export default function EinkaufsBestellungenÜbersicht() {
             )}
             render={(value) => <PoStatusTag status={value} />} sorter 
           />
-          <Table.Column title="Bestellbestätigung" dataIndex="confirmation_number" sorter render={(value, record) => {
+          <Table.Column title="Auftragsbestätigung" dataIndex="confirmation_number" sorter render={(value, record) => {
             return value ? 
               <Space direction="vertical" size={0}>
                 <Typography.Text strong>{value}</Typography.Text>

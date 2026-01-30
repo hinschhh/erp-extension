@@ -465,7 +465,7 @@ export default function MonatsabschlussPage() {
     meta: {
       // WICHTIG: shipping_costs_proportional ist jetzt auf app_inbound_shipment_items
       select:
-        "id, inbound_number, delivered_at, invoice_number, delivery_note_number, shipping_cost_separate, app_inbound_shipment_items(id, quantity_delivered, shipping_costs_proportional, app_purchase_orders(app_suppliers(id, tax_country)), app_purchase_orders_positions_normal(unit_price_net, app_products(inventory_cagtegory, bb_sku)), app_purchase_orders_positions_special(unit_price_net, billbee_product:app_products!app_purchase_orders_positions_special_billbee_product_id_fkey(inventory_cagtegory, bb_sku)))",
+        "id, inbound_number, delivered_at, invoice_number, delivery_note_number, shipping_cost, app_inbound_shipment_items(id, quantity_delivered, shipping_costs_proportional, app_purchase_orders(app_suppliers(id, tax_country)), app_purchase_orders_positions_normal(unit_price_net, app_products(inventory_cagtegory, bb_sku)), app_purchase_orders_positions_special(unit_price_net, billbee_product:app_products!app_purchase_orders_positions_special_billbee_product_id_fkey(inventory_cagtegory, bb_sku)))",
     },
     pagination: { mode: "off" },
     filters,

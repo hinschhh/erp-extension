@@ -19,7 +19,7 @@ type Row = {
   sku: string | null;
   inventory_cagtegory: string | null;
   supplier: string | null;
-  on_demand: boolean | null;      // ⬅️ NEU
+  on_demand: boolean | null;
   stock_free: number | string;
   stock_reserved_direct: number | string;
   stock_reserved_bom: number | string;

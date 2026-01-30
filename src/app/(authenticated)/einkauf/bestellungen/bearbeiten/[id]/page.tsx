@@ -323,7 +323,7 @@ export default function EinkaufsBestellungenBearbeiten() {
                 <DatePicker type="date" placeholder="Datum wählen..." format="DD.MM.YYYY" style={{ width: "100%" }} />
               </Form.Item>
 
-              <Form.Item label="Bestätigungsnummer" name="confirmation_number">
+              <Form.Item label="Auftragsbestätigungsnummer" name="confirmation_number">
                 <Input />
               </Form.Item>
 

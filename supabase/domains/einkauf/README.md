@@ -614,10 +614,11 @@ Die folgenden Views existieren noch in der Datenbank, sind aber **veraltet** und
 - Aggregationen (qty_received, qty_open) sollten im Frontend oder via explizite JOINs berechnet werden
 
 ### Reports (Legacy)
-**Noch in Verwendung:**
-- `rpt_products_inventory_purchasing` (verwendet in [bestellvorschlaege/page.tsx](src/app/(authenticated)/einkauf/bestellvorschlaege/page.tsx))
-  - ⚠️ **Muss mittelfristig überarbeitet werden**
-  - Sollte durch direkte Queries auf `app_products` + `app_stock_levels` + `app_purchase_orders_positions_normal` ersetzt werden
+**Ehemalige Views (jetzt gelöscht):**
+- `rpt_products_inventory_purchasing` 
+  - ⚠️ **Wurde am 2026-01-19 entfernt**
+  - Ersetzt durch direkte Queries auf `app_products` mit Joins zu `stg_billbee_stock`, `stg_billbee_stock_committed`, und `app_component_sales_last_3_months`
+  - Frontend berechnet Aggregationen selbst (siehe [bestellvorschlaege/page.tsx](src/app/(authenticated)/einkauf/bestellvorschlaege/page.tsx))
 
 ---
 

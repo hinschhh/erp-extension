@@ -90,7 +90,7 @@ export default function InboundShipmentCreatePage() {
             </Form.Item>
           </Col>*/}
           <Col span={8}>
-          <Form.Item name="shipping_cost_separate" label="Lieferkosten separate Rechnung">
+          <Form.Item name="shipping_cost" label="Lieferkosten separate Rechnung">
             <InputNumber placeholder="Betrag" addonAfter="€" step={0.01} />
           </Form.Item>
         </Col>
