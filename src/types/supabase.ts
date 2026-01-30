@@ -708,7 +708,7 @@ export type Database = {
           fk_app_customers_id: number | null
           id: number
           offered_at: string | null
-          ordered_at: string | null
+          bb_OrderedAt: string | null
         }
         Insert: {
           bb_AdjustmentCost?: number | null

@@ -5,7 +5,9 @@ import {
   ShopOutlined,
   GoldOutlined,
   PhoneOutlined,
+  LineChartOutlined,
 } from "@ant-design/icons";
+import { Chart } from "@ant-design/plots/es/core/base/chart";
 
 /**
  * Leitlinien:
@@ -135,6 +137,12 @@ const resources: IResourceItem[] = [
     show: "/buchhaltung/monatsabschluss",
     options: { label: "Monatsabschluss" },
     parentName: "accounting",
+  },
+  {
+    name: "Dashboard",
+    list: "/dashboard",
+    options: { label: "Dashboard" },
+    icon: <LineChartOutlined />,
   }
 
 
