@@ -102,6 +102,9 @@ export default function SelectPOOrderModal({
       select:
         "id, order_id, qty_ordered, billbee_product_id, app_products!billbee_product_id(bb_sku), app_inbound_shipment_items!po_item_normal_id(quantity_delivered)",
     },
+    pagination: {
+      mode: "off",
+    },
     queryOptions: { enabled: !!orderId },
   });
 
@@ -117,6 +120,9 @@ export default function SelectPOOrderModal({
         "id, order_id, qty_ordered, supplier_sku, internal_notes, order_confirmation_ref, base_product:app_products!base_model_billbee_product_id(bb_sku), special_product:app_products!billbee_product_id(bb_sku), app_inbound_shipment_items!po_item_special_id(quantity_delivered)",
     },
     queryOptions: { enabled: !!orderId },
+    pagination: {
+      mode: "off",
+    },
   });
 
   // Reichere Daten mit berechneten Feldern an
