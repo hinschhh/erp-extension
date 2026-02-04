@@ -9,20 +9,18 @@ export function KanbanBoardContainer({children}: React.PropsWithChildren<{}>) {
     return (
         <div 
             style={{ 
-                height: "calc(100vh - 64px)",
-                width: "calc(100% + 64px)",
+                height: "calc(100vh)",
+                width: "calc(100%)",
                 display: "flex", 
                 justifyContent: "column",
                 gap: "16px", 
-                padding: "16px", 
                 }}
             >
             <div 
                 style={{ 
                     minWidth: "16px", 
-                    display: "flex", 
-                    padding: "32px",
-                    overflow: "scroll",
+                    display: "flex",
+                    maxWidth: "100%",
                 }}
             >
                 {children}

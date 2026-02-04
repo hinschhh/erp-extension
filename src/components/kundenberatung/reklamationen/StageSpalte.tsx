@@ -27,28 +27,31 @@ export default function StageSpalte({children, id, title, description, count, da
             style={{
                 display: "flex",
                 flexDirection: "column",
-                padding: "0 16px",
+                padding: "0 8px",
+                flex: 1,
+                minWidth: 0,
+                alignSelf: "flex-start",
             }}
         >
             <div
                 style={{
                     padding: '12px',
+                    minHeight: '64px',
                 }}
             >
                 <Space style={{width: '100%', justifyContent: 'space-between'}} >
                     <Space>
                         <TextField
                             value={title}
-                            ellipsis={{ tooltip: title }}
                             strong
                             style={{
                                 textTransform: "uppercase",
-                                whiteSpace: "nowrap",
+                                wordBreak: "break-word",
                             }}
                        />
                         {!! count && <Badge count={count} color="cyan" />}
                     </Space>
-                    {/*<AddReklamationButton onAddClick={onAddClick} id={id} />*/}
+                    <AddReklamationButton onAddClick={onAddClick} id={id} />
 
                 </Space>
                 {description}

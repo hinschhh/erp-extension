@@ -18,7 +18,7 @@ type ProjectCardProps = {
 export default function ReklamationCard({ id, title, dueDate, users }: ProjectCardProps) {
     return (
         <Card
-            title={title}
+            title={<div style={{ wordBreak: "break-word", whiteSpace: "normal" }}>{title}</div>}
             extra={<EditReklamationButton id={id}/>}
             style={{
                 border: '1px solid #eee',

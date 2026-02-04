@@ -7,30 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "12.2.3 (519615d)"
   }
   public: {
     Tables: {
@@ -90,14 +70,17 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          name: string | null
         }
         Insert: {
           created_at?: string
           id: string
+          name?: string | null
         }
         Update: {
           created_at?: string
           id?: string
+          name?: string | null
         }
         Relationships: []
       }
@@ -163,6 +146,7 @@ export type Database = {
           quantity_delivered: number
           shipment_id: string
           shipping_costs_proportional: number | null
+          updated_at: string | null
         }
         Insert: {
           created_at?: string
@@ -174,6 +158,7 @@ export type Database = {
           quantity_delivered: number
           shipment_id: string
           shipping_costs_proportional?: number | null
+          updated_at?: string | null
         }
         Update: {
           created_at?: string
@@ -185,6 +170,7 @@ export type Database = {
           quantity_delivered?: number
           shipment_id?: string
           shipping_costs_proportional?: number | null
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -220,7 +206,7 @@ export type Database = {
       app_inbound_shipments: {
         Row: {
           created_at: string
-          created_by: string | null
+          created_by: string
           delivered_at: string
           delivery_note_file_url: string | null
           delivery_note_number: string | null
@@ -239,7 +225,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          created_by?: string | null
+          created_by?: string
           delivered_at?: string
           delivery_note_file_url?: string | null
           delivery_note_number?: string | null
@@ -258,7 +244,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          created_by?: string | null
+          created_by?: string
           delivered_at?: string
           delivery_note_file_url?: string | null
           delivery_note_number?: string | null
@@ -336,6 +322,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "export_current_purchase_prices"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_adjustments_fk_products_fkey"
+            columns: ["fk_products"]
+            isOneToOne: false
+            referencedRelation: "rpt_products_inventory_purchasing"
+            referencedColumns: ["product_id"]
           },
           {
             foreignKeyName: "inventory_adjustments_fk_stocks_fkey"
@@ -418,6 +411,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "export_current_purchase_prices"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_counts_fk_products_fkey"
+            columns: ["fk_products"]
+            isOneToOne: false
+            referencedRelation: "rpt_products_inventory_purchasing"
+            referencedColumns: ["product_id"]
           },
           {
             foreignKeyName: "inventory_counts_fk_stocks_fkey"
@@ -549,6 +549,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "inventory_snapshots_fk_products_fkey"
+            columns: ["fk_products"]
+            isOneToOne: false
+            referencedRelation: "rpt_products_inventory_purchasing"
+            referencedColumns: ["product_id"]
+          },
+          {
             foreignKeyName: "inventory_snapshots_session_id_fkey"
             columns: ["session_id"]
             isOneToOne: false
@@ -678,6 +685,13 @@ export type Database = {
             referencedRelation: "export_current_purchase_prices"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "app_order_items_fk_app_products_id_fkey"
+            columns: ["fk_app_products_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products_inventory_purchasing"
+            referencedColumns: ["product_id"]
+          },
         ]
       }
       app_orders: {
@@ -708,7 +722,7 @@ export type Database = {
           fk_app_customers_id: number | null
           id: number
           offered_at: string | null
-          bb_OrderedAt: string | null
+          ordered_at: string | null
         }
         Insert: {
           bb_AdjustmentCost?: number | null
@@ -804,6 +818,7 @@ export type Database = {
           purchase_details: string | null
           room: string | null
           supplier_sku: string | null
+          updated_at: string | null
         }
         Insert: {
           acquisition_cost?: number
@@ -830,6 +845,7 @@ export type Database = {
           purchase_details?: string | null
           room?: string | null
           supplier_sku?: string | null
+          updated_at?: string | null
         }
         Update: {
           acquisition_cost?: number
@@ -856,6 +872,7 @@ export type Database = {
           purchase_details?: string | null
           room?: string | null
           supplier_sku?: string | null
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -1028,6 +1045,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "app_purchase_orders_positions_normal_billbee_product_id_fkey"
+            columns: ["billbee_product_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products_inventory_purchasing"
+            referencedColumns: ["product_id"]
+          },
+          {
             foreignKeyName: "app_purchase_orders_positions_normal_fk_app_order_items_id_fkey"
             columns: ["fk_app_order_items_id"]
             isOneToOne: false
@@ -1139,6 +1163,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "app_purchase_orders_positions_base_model_billbee_product_i_fkey"
+            columns: ["base_model_billbee_product_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products_inventory_purchasing"
+            referencedColumns: ["product_id"]
+          },
+          {
             foreignKeyName: "app_purchase_orders_positions_specia_fk_app_order_items_id_fkey"
             columns: ["fk_app_order_items_id"]
             isOneToOne: false
@@ -1158,6 +1189,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "export_current_purchase_prices"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "app_purchase_orders_positions_special_billbee_product_id_fkey"
+            columns: ["billbee_product_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products_inventory_purchasing"
+            referencedColumns: ["product_id"]
           },
           {
             foreignKeyName: "app_purchase_orders_positions_special_fk_app_orders_id_fkey"
@@ -1223,6 +1261,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "export_current_purchase_prices"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "app_stock_levels_fk_products_fkey"
+            columns: ["fk_products"]
+            isOneToOne: false
+            referencedRelation: "rpt_products_inventory_purchasing"
+            referencedColumns: ["product_id"]
           },
           {
             foreignKeyName: "app_stock_levels_fk_stocks_fkey"
@@ -1494,6 +1539,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "bom_recipes_billbee_bom_id_fkey"
+            columns: ["billbee_bom_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products_inventory_purchasing"
+            referencedColumns: ["product_id"]
+          },
+          {
             foreignKeyName: "bom_recipes_billbee_component_id_fkey"
             columns: ["billbee_component_id"]
             isOneToOne: false
@@ -1506,6 +1558,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "export_current_purchase_prices"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bom_recipes_billbee_component_id_fkey"
+            columns: ["billbee_component_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_products_inventory_purchasing"
+            referencedColumns: ["product_id"]
           },
         ]
       }
@@ -1727,6 +1786,13 @@ export type Database = {
             referencedRelation: "export_current_purchase_prices"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "stg_billbee_stock_billbee_product_id_fkey"
+            columns: ["billbee_product_id"]
+            isOneToOne: true
+            referencedRelation: "rpt_products_inventory_purchasing"
+            referencedColumns: ["product_id"]
+          },
         ]
       }
       stg_billbee_stock_committed: {
@@ -1760,6 +1826,13 @@ export type Database = {
             referencedRelation: "export_current_purchase_prices"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "stg_billbee_stock_committed_billbee_product_id_fkey"
+            columns: ["billbee_product_id"]
+            isOneToOne: true
+            referencedRelation: "rpt_products_inventory_purchasing"
+            referencedColumns: ["product_id"]
+          },
         ]
       }
       users: {
@@ -1788,6 +1861,13 @@ export type Database = {
       }
     }
     Views: {
+      app_component_sales_last_3_months: {
+        Row: {
+          fk_app_products_id: number | null
+          qty_sold_last_3_months: number | null
+        }
+        Relationships: []
+      }
       export_current_purchase_prices: {
         Row: {
           bb_is_active: boolean | null
@@ -1799,6 +1879,45 @@ export type Database = {
           production_required: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "app_products_inventory_cagtegory_fkey"
+            columns: ["inventory_cagtegory"]
+            isOneToOne: false
+            referencedRelation: "app_products_inventory_categories"
+            referencedColumns: ["inventory_category"]
+          },
+        ]
+      }
+      rpt_products_inventory_purchasing: {
+        Row: {
+          bb_category: string | null
+          consumption_3m_rolling: number | null
+          counted_at: string | null
+          counted_qty: number | null
+          inventory_cagtegory: string | null
+          inventory_value: number | null
+          name: string | null
+          on_demand: boolean | null
+          product_id: number | null
+          sku: string | null
+          stock_free: number | null
+          stock_on_order: number | null
+          stock_physical: number | null
+          stock_reserved_bom: number | null
+          stock_reserved_direct: number | null
+          stock_unavailable: number | null
+          supplier: string | null
+          unit_cost_net: number | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_products_fk_bb_supplier_fkey"
+            columns: ["supplier"]
+            isOneToOne: false
+            referencedRelation: "app_suppliers"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "app_products_inventory_cagtegory_fkey"
             columns: ["inventory_cagtegory"]
@@ -2010,9 +2129,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       is_status: ["planned", "delivered", "posted"],
@@ -2041,4 +2157,3 @@ export const Constants = {
     },
   },
 } as const
-

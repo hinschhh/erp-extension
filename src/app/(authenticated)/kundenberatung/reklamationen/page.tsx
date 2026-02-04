@@ -17,13 +17,11 @@ type StagesWithComplaints = Stages & {
     complaints: Complaints[];
 };
 
-export default function PageComplaints() {
-    return null;
-}
 
-/*export default function PageComplaints() {
+export default function PageComplaints() {
   const { data: stages, isLoading: isLoadingStages } = useList<Stages>({
     resource: "app_complaints_stages",
+    sorters: [{ field: "id", order: "asc" }],
   });
 
   const { data: complaints, isLoading: isLoadingComplaints } = useList<Complaints>({ 
@@ -86,32 +84,11 @@ export default function PageComplaints() {
         <KanbanBoard
           onDragEnd={handleOnDragEnd}
         >
-          <StageSpalte
-            id="unassigned"
-            title={"unassignedStages"}
-            count={complaintsStages.unassignedStage?.length || 0}
-            onAddClick={() => handleAddCard({ stageId: 'unassigned' })}
-          >
-            {complaintsStages.unassignedStage.map((complaint) => (
-              <Reklamation
-                key={complaint.id}
-                id={complaint.id.toString()}
-                data={{ ...complaint, stageId: 'unassigned' }}
-              >
-                <ReklamationCard
-                  {...complaint}
-                  id={complaint.id.toString()}
-                  title={complaint.description || "Keine Beschreibung"}
-                  dueDate={complaint.created_at}
-                />
-              </Reklamation>
-            ))}
-          </StageSpalte>
           {complaintsStages.columns?.map((column) => (
             <StageSpalte
               key={column.id}
               id={column.id.toString()}
-              title={column.id}
+              title={column.name as string}
               count={column.complaints.length || 0}
               onAddClick={() => handleAddCard({ stageId: column.id })}
             >
@@ -133,4 +110,4 @@ export default function PageComplaints() {
       </KanbanBoardContainer>
     </List>
   );
-}*/
+}
