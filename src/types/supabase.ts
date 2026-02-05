@@ -14,33 +14,123 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_complaint_causes: {
+        Row: {
+          created_at: string
+          id: number
+          label: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          label?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          label?: string | null
+        }
+        Relationships: []
+      }
+      app_complaint_responsibilities: {
+        Row: {
+          created_at: string
+          id: number
+          label: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          label?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          label?: string | null
+        }
+        Relationships: []
+      }
+      app_complaint_timeline: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          event: string | null
+          fk_complaint: number | null
+          id: number
+          is_solution: boolean | null
+          message: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          event?: string | null
+          fk_complaint?: number | null
+          id?: number
+          is_solution?: boolean | null
+          message?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          event?: string | null
+          fk_complaint?: number | null
+          id?: number
+          is_solution?: boolean | null
+          message?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_complaint_timeline_created_by_fkey1"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "app_complaint_timeline_fk_complaint_fkey"
+            columns: ["fk_complaint"]
+            isOneToOne: false
+            referencedRelation: "app_complaints"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       app_complaints: {
         Row: {
           created_at: string
           description: string | null
           fk_app_order_items_id: number | null
           fk_app_orders_id: number | null
+          fk_cause: number | null
+          fk_responsibility: number | null
           id: number
           improvement_idea: string | null
-          stage: string | null
+          is_external: boolean | null
+          stage: string
         }
         Insert: {
           created_at?: string
           description?: string | null
           fk_app_order_items_id?: number | null
           fk_app_orders_id?: number | null
+          fk_cause?: number | null
+          fk_responsibility?: number | null
           id?: number
           improvement_idea?: string | null
-          stage?: string | null
+          is_external?: boolean | null
+          stage: string
         }
         Update: {
           created_at?: string
           description?: string | null
           fk_app_order_items_id?: number | null
           fk_app_orders_id?: number | null
+          fk_cause?: number | null
+          fk_responsibility?: number | null
           id?: number
           improvement_idea?: string | null
-          stage?: string | null
+          is_external?: boolean | null
+          stage?: string
         }
         Relationships: [
           {
@@ -55,6 +145,20 @@ export type Database = {
             columns: ["fk_app_orders_id"]
             isOneToOne: false
             referencedRelation: "app_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "app_complaints_fk_cause_fkey"
+            columns: ["fk_cause"]
+            isOneToOne: false
+            referencedRelation: "app_complaint_causes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "app_complaints_fk_responsibility_fkey"
+            columns: ["fk_responsibility"]
+            isOneToOne: false
+            referencedRelation: "app_complaint_responsibilities"
             referencedColumns: ["id"]
           },
           {
@@ -713,6 +817,8 @@ export type Database = {
           bb_SellerComment: string | null
           bb_ShippedAt: string | null
           bb_ShippingCost: number | null
+          bb_ShippingProviderName: string | null
+          bb_ShippingProviderProductName: string | null
           bb_State: number | null
           bb_TotalCost: number | null
           bb_VatMode: number | null
@@ -742,6 +848,8 @@ export type Database = {
           bb_SellerComment?: string | null
           bb_ShippedAt?: string | null
           bb_ShippingCost?: number | null
+          bb_ShippingProviderName?: string | null
+          bb_ShippingProviderProductName?: string | null
           bb_State?: number | null
           bb_TotalCost?: number | null
           bb_VatMode?: number | null
@@ -771,6 +879,8 @@ export type Database = {
           bb_SellerComment?: string | null
           bb_ShippedAt?: string | null
           bb_ShippingCost?: number | null
+          bb_ShippingProviderName?: string | null
+          bb_ShippingProviderProductName?: string | null
           bb_State?: number | null
           bb_TotalCost?: number | null
           bb_VatMode?: number | null
