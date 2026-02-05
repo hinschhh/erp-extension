@@ -13,6 +13,20 @@ import { DragEndEvent } from "@dnd-kit/core";
 type Complaints = Tables<"app_complaints">;
 type Stages = Tables<"app_complaints_stages">;
 
+type OrderSummary = Pick<Tables<"app_orders">, "bb_OrderNumber"> & {
+  app_customers?: Pick<Tables<"app_customers">, "bb_Name"> | null;
+};
+
+type OrderItemSummary = Pick<Tables<"app_order_items">, "id"> & {
+  app_products?: Pick<Tables<"app_products">, "bb_name" | "bb_sku"> | null;
+  app_orders?: OrderSummary | null;
+};
+
+type ComplaintsWithRelations = Complaints & {
+  app_order_items?: OrderItemSummary | null;
+  app_orders?: OrderSummary | null;
+};
+
 type StagesWithComplaints = Stages & {
     complaints: Complaints[];
 };
@@ -27,6 +41,10 @@ export default function PageComplaints() {
   const { data: complaints, isLoading: isLoadingComplaints } = useList<Complaints>({ 
     resource: "app_complaints",
     pagination: { pageSize: 100 },
+    meta: {
+      select:
+        "*, app_order_items(id, app_products(bb_name, bb_sku), app_orders(bb_OrderNumber, app_customers(bb_Name))), app_orders(bb_OrderNumber, app_customers(bb_Name))",
+    },
     queryOptions: {
         enabled: !isLoadingStages,
     },
@@ -92,7 +110,9 @@ export default function PageComplaints() {
               count={column.complaints.length || 0}
               onAddClick={() => handleAddCard({ stageId: column.id })}
             >
-              {column.complaints.map((complaint) => (
+              {column.complaints.map((complaint) => {
+                const complaintWithRelations = complaint as ComplaintsWithRelations;
+                return (
                 <Reklamation
                   key={complaint.id}
                   id={complaint.id.toString()}
@@ -100,10 +120,23 @@ export default function PageComplaints() {
                 >
                   <ReklamationCard
                     id={String(complaint.id)}
-                    title={complaint.description || "Keine Beschreibung"}
+                    orderNumber={
+                      complaintWithRelations.app_order_items?.app_orders?.bb_OrderNumber ||
+                      complaintWithRelations.app_orders?.bb_OrderNumber
+                    }
+                    customerName={
+                      complaintWithRelations.app_order_items?.app_orders?.app_customers?.bb_Name ||
+                      complaintWithRelations.app_orders?.app_customers?.bb_Name
+                    }
+                    productLabel={
+                      complaintWithRelations.app_order_items?.app_products?.bb_name ||
+                      complaintWithRelations.app_order_items?.app_products?.bb_sku
+                    }
+                    description={complaint.description}
                   />
                 </Reklamation>
-              ))}
+                );
+              })}
             </StageSpalte>
           ))}
         </KanbanBoard>

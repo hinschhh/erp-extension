@@ -15,6 +15,16 @@ type ComplaintTimeline = Tables<"app_complaint_timeline">;
 
 
 export default function EditReklamationButton<Complaints>({id}: {id: string}) {
+    // State variables must be declared before they are used in hooks
+    const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+    const [selectedOrderItemId, setSelectedOrderItemId] = useState<number | null>(null);
+    const [selectedResponsibility, setSelectedResponsibility] = useState<number | null>(null);
+    const [timelineMessage, setTimelineMessage] = useState<string>("");
+    const [isSolution, setIsSolution] = useState<boolean>(false);
+    const [editingTimelineId, setEditingTimelineId] = useState<number | null>(null);
+    const [editingMessage, setEditingMessage] = useState<string>("");
+    const [editingIsSolution, setEditingIsSolution] = useState<boolean>(false);
+
     const { formProps: editFormProps, modalProps: editModalProps, show: showEditModal, formLoading, queryResult } = useModalForm({
         resource: "app_complaints",
         action: "edit",
@@ -41,6 +51,12 @@ export default function EditReklamationButton<Complaints>({id}: {id: string}) {
         resource: "app_complaint_causes",
         optionLabel: "label",
         optionValue: "id",
+        filters: [
+            { field: "fk_complaint_responsibilities", operator: "eq", value: selectedResponsibility }
+        ],
+        queryOptions: {
+            enabled: !!selectedResponsibility,
+        },
     });
 
     // Bereits verknüpfte Order/Item IDs für Cascader
@@ -59,13 +75,6 @@ export default function EditReklamationButton<Complaints>({id}: {id: string}) {
             { field: "bb_ShippedAt", operator: "ne", value: null },
         ]
     );
-    const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
-    const [selectedOrderItemId, setSelectedOrderItemId] = useState<number | null>(null);
-    const [timelineMessage, setTimelineMessage] = useState<string>("");
-    const [isSolution, setIsSolution] = useState<boolean>(false);
-    const [editingTimelineId, setEditingTimelineId] = useState<number | null>(null);
-    const [editingMessage, setEditingMessage] = useState<string>("");
-    const [editingIsSolution, setEditingIsSolution] = useState<boolean>(false);
 
     const invalidate = useInvalidate();
 
@@ -100,6 +109,9 @@ export default function EditReklamationButton<Complaints>({id}: {id: string}) {
             }
             if (complaint.fk_app_order_items_id) {
                 setSelectedOrderItemId(complaint.fk_app_order_items_id);
+            }
+            if (complaint.fk_responsibility) {
+                setSelectedResponsibility(complaint.fk_responsibility);
             }
         }
     }, [queryResult?.data?.data]);
@@ -348,7 +360,17 @@ export default function EditReklamationButton<Complaints>({id}: {id: string}) {
                         label="Verantwortung"
                         name="fk_responsibility"
                     >
-                        <Select {...responsibilityOptions} />
+                        <Select 
+                            {...responsibilityOptions}
+                            onChange={(value) => {
+                                const responsibilityId = typeof value === 'number' ? value : (value as any)?.value || value;
+                                setSelectedResponsibility(responsibilityId);
+                                // Clear the cause selection when responsibility changes
+                                editFormProps.form?.setFieldValue("fk_cause", null);
+                                // Call the original onChange if it exists
+                                responsibilityOptions.onChange?.(value);
+                            }}
+                        />
                     </Form.Item>
                     <Form.Item
                         label="Ursache - Wobei ist der Fehler aufgetreten?"
