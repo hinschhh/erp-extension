@@ -110,8 +110,22 @@ export const useOrderItemCascader = (
 
     // Filter für Orders aufbauen
     const orderFilters = useMemo(() => {
-        return filters ?? [];
-    }, [filters]);
+        const baseFilters = filters ?? [];
+        
+        if (!searchTerm) return baseFilters;
+        
+        // Suche in Order-Nummer und Kundenname
+        return [
+            ...baseFilters,
+            {
+                operator: "or",
+                value: [
+                    { field: "bb_OrderNumber", operator: "contains", value: searchTerm },
+                    { field: "app_customers.bb_Name", operator: "contains", value: searchTerm },
+                ],
+            },
+        ];
+    }, [filters, searchTerm]);
 
     // Ebene 1: Orders laden (letzte 500)
     const { data: ordersData, isLoading: loadingOrders } = useList<Order>({

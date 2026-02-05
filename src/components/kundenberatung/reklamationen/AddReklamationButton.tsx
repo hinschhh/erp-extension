@@ -43,7 +43,7 @@ export default function AddReklamationButton({ onAddClickAction, id }: Props) {
         optionValue: "id",
     });
 
-    const { options, loading } = useOrderItemCascader(
+    const { options, loading, onSearch } = useOrderItemCascader(
         [],
         [],
         [
@@ -148,6 +148,8 @@ export default function AddReklamationButton({ onAddClickAction, id }: Props) {
                             options={options} 
                             loading={loading}
                             onChange={handleCascaderChange}
+                            onSearch={onSearch}
+                            showSearch
                             placeholder="Bestellung und Position auswählen..."
                         />
                     </Form.Item>

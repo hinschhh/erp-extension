@@ -52,7 +52,7 @@ export default function EditReklamationButton<Complaints>({id}: {id: string}) {
         ? [queryResult.data.data.fk_app_order_items_id]
         : [];
 
-    const { options, loading } = useOrderItemCascader(
+    const { options, loading, onSearch } = useOrderItemCascader(
         existingOrderIds,
         existingItemIds,
         [
@@ -124,7 +124,7 @@ export default function EditReklamationButton<Complaints>({id}: {id: string}) {
             enabled: !!selectedOrderItemId,
         },
         meta: {
-            select: "*, app_products(bb_sku, bb_name), app_order_item_attributes(bb_Name, bb_Value)"
+            select: "*, app_products(bb_sku, bb_name), app_order_item_attributes(bb_Name, bb_Value), app_orders(bb_ShippingProviderName)"
         }
     });
 
@@ -260,6 +260,8 @@ export default function EditReklamationButton<Complaints>({id}: {id: string}) {
                             options={options} 
                             loading={loading}
                             onChange={handleCascaderChange}
+                            onSearch={onSearch}
+                            showSearch
                         />
 
                     </Form.Item>
@@ -318,7 +320,7 @@ export default function EditReklamationButton<Complaints>({id}: {id: string}) {
                                         </div>
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Ausliefernde Spedition">
-                                        <span>{orderItem.bb_ShippingProviderName || "—"}</span>                                     
+                                        <span>{orderItem.app_orders.bb_ShippingProviderName || "—"}</span>                                     
                                     </Descriptions.Item>
                                 </>
                             )}
