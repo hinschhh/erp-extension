@@ -8,7 +8,14 @@ import { SaveButton, EditButton, DeleteButton } from "@refinedev/antd";// Adjust
 
 export default function Page() {
 
-    const { options, loading } = useOrderItemCascader();
+    const { options, loading } = useOrderItemCascader(
+        undefined,
+        undefined,
+        [
+          { field: "bb_ShippedAt", operator: "null" },
+          { field: "bb_State", operator: "in", value: [1, 2, 3, 16] }
+        ]
+    );
 
     const { tableProps, formProps, isEditing, saveButtonProps, editButtonProps, cancelButtonProps } = useEditableTable({
         resource: "app_purchase_orders_positions_special",

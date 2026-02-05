@@ -12,11 +12,11 @@ import dayjs from "dayjs";
 type ComplaintStages = Tables<"app_complaints_stages">;
 
 type Props = {
-    onAddClick?: (args: { id: string }) => void;
+    onAddClickAction?: (args: { id: string }) => void;
     id: string;
 };
 
-export default function AddReklamationButton({ onAddClick, id }: Props) {
+export default function AddReklamationButton({ onAddClickAction, id }: Props) {
     const { formProps: createFormProps, modalProps: createModalProps, show: showCreateModal } = useModalForm({
         resource: "app_complaints",
         action: "create",
@@ -43,7 +43,13 @@ export default function AddReklamationButton({ onAddClick, id }: Props) {
         optionValue: "id",
     });
 
-    const { options, loading } = useOrderItemCascader();
+    const { options, loading } = useOrderItemCascader(
+        [],
+        [],
+        [
+            { field: "bb_ShippedAt", operator: "ne", value: null }
+        ]
+    );
     const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
     const [selectedOrderItemId, setSelectedOrderItemId] = useState<number | null>(null);
 

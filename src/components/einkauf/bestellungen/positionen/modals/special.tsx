@@ -135,7 +135,14 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
     return refineOnFinish(values);
 };
 
-    const { options, loading } = useOrderItemCascader();
+    const { options, loading } = useOrderItemCascader(
+        undefined,
+        undefined,
+        [
+          { field: "bb_ShippedAt", operator: "null" },
+          { field: "bb_State", operator: "in", value: [1, 2, 3, 16] }
+        ]
+    );
 
     return (
         <>

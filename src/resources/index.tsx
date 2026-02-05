@@ -43,6 +43,18 @@ const resources: IResourceItem[] = [
     parentName: "kundenberatung",
     options: { label: "Reklamationen" },
   },
+  // Reklamationen - Verantwortlichkeiten (DB: app_complaint_responsibilities)
+  {
+    name: "app_complaint_responsibilities",
+  },
+  // Reklamationen - Ursachen (DB: app_complaint_causes)
+  {
+    name: "app_complaint_causes",
+  },
+  // Reklamationen - Stages (DB: app_complaints_stages)
+  {
+    name: "app_complaints_stages",
+  },
 
   // ── Sektion: Einkauf (nur Navigation/Gruppe)
   {

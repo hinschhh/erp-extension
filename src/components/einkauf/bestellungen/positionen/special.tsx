@@ -91,7 +91,14 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
         ?.map(row => (row as PoItemSpecial).fk_app_order_items_id)
         .filter((id): id is number => typeof id === 'number') ?? [];
 
-      const { options, loading, onSearch } = useOrderItemCascader(existingOrderIds, existingItemIds);
+      const { options, loading, onSearch } = useOrderItemCascader(
+        existingOrderIds,
+        existingItemIds,
+        [
+          { field: "bb_ShippedAt", operator: "null" },
+          { field: "bb_State", operator: "in", value: [1, 2, 3, 16] }
+        ]
+      );
 
   return (
     <Card style={{ marginTop: 24 }}>

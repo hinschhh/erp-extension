@@ -95,10 +95,12 @@ const buildOptions = (
  * 
  * @param currentOrderIds - Wenn gesetzt, werden diese Orders zusätzlich geladen (für bereits verknüpfte Items)
  * @param currentOrderItemIds - Wenn gesetzt, werden diese Items zusätzlich geladen
+ * @param filters - Optionale Filter für Orders (z.B. bb_ShippedAt, bb_State)
  */
 export const useOrderItemCascader = (
     currentOrderIds?: number[],
     currentOrderItemIds?: number[],
+    filters?: any[],
 ): {
     options: CascaderProps["options"];
     loading: boolean;
@@ -108,12 +110,8 @@ export const useOrderItemCascader = (
 
     // Filter für Orders aufbauen
     const orderFilters = useMemo(() => {
-        const filters: any[] = [
-            { field: "bb_State", operator: "in", value: [ 1,2,3, 16] }, // nur aktive States
-        ];
-
-        return filters;
-    }, []);
+        return filters ?? [];
+    }, [filters]);
 
     // Ebene 1: Orders laden (letzte 500)
     const { data: ordersData, isLoading: loadingOrders } = useList<Order>({
@@ -165,9 +163,9 @@ export const useOrderItemCascader = (
     const { data: itemsData, isLoading: loadingItems } = useList<OrderItem>({
         resource: "app_order_items",
         pagination: { mode: "off" },
-        filters: [
-            { field: "fk_app_orders_id", operator: "in", value: orderIds },
-        ],
+        filters: orderIds.length > 0
+            ? [{ field: "fk_app_orders_id", operator: "in", value: orderIds }]
+            : [],
         meta: {
             select: "*, app_orders(bb_InvoiceDate), app_products(bb_sku, bb_name), app_order_item_attributes(bb_Name, bb_Value)",
         },

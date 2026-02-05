@@ -121,7 +121,14 @@ export default function EinkaufBestellpositionenNormalBearbeiten({
     ?.map(row => (row as PoItemNormal).fk_app_order_items_id)
     .filter((id): id is number => typeof id === 'number') ?? [];
 
-  const { options: orderItemOptions, loading: orderItemLoading, onSearch } = useOrderItemCascader(existingOrderIds, existingItemIds);
+  const { options: orderItemOptions, loading: orderItemLoading, onSearch } = useOrderItemCascader(
+    existingOrderIds,
+    existingItemIds,
+    [
+      { field: "bb_ShippedAt", operator: "null" },
+      { field: "bb_State", operator: "in", value: [1, 2, 3, 16] }
+    ]
+  );
 
   return (
     <Card>

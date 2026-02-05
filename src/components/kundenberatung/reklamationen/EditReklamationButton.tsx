@@ -1,16 +1,17 @@
 "use client";
 
-import { MenuOutlined } from "@ant-design/icons";
+import { MenuOutlined, SendOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useModalForm, useSelect } from "@refinedev/antd";
-import { useOne } from "@refinedev/core";
+import { useOne, useCreate, useList, useInvalidate, useDelete, useUpdate } from "@refinedev/core";
 import { Tables } from "@/types/supabase";
-import { Button, Cascader, Descriptions, Form, Input, Modal, Select, Switch, Typography } from "antd";
+import { Button, Cascader, Checkbox, Descriptions, Divider, Form, Input, Modal, Popconfirm, Select, Space, Switch, Timeline, Tooltip, Typography } from "antd";
 import { useOrderItemCascader } from "@components/common/selects/cascader_order_items";
 import { useState, useEffect } from "react";
 import dayjs from "dayjs";
 
 type Complaints = Tables<"app_complaints">;
 type ComplaintStages = Tables<"app_complaints_stages">;
+type ComplaintTimeline = Tables<"app_complaint_timeline">;
 
 
 export default function EditReklamationButton<Complaints>({id}: {id: string}) {
@@ -42,9 +43,53 @@ export default function EditReklamationButton<Complaints>({id}: {id: string}) {
         optionValue: "id",
     });
 
-    const { options, loading } = useOrderItemCascader();
+    // Bereits verknüpfte Order/Item IDs für Cascader
+    const existingOrderIds = queryResult?.data?.data?.fk_app_orders_id 
+        ? [queryResult.data.data.fk_app_orders_id] 
+        : [];
+    
+    const existingItemIds = queryResult?.data?.data?.fk_app_order_items_id
+        ? [queryResult.data.data.fk_app_order_items_id]
+        : [];
+
+    const { options, loading } = useOrderItemCascader(
+        existingOrderIds,
+        existingItemIds,
+        [
+            { field: "bb_ShippedAt", operator: "ne", value: null },
+        ]
+    );
     const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
     const [selectedOrderItemId, setSelectedOrderItemId] = useState<number | null>(null);
+    const [timelineMessage, setTimelineMessage] = useState<string>("");
+    const [isSolution, setIsSolution] = useState<boolean>(false);
+    const [editingTimelineId, setEditingTimelineId] = useState<number | null>(null);
+    const [editingMessage, setEditingMessage] = useState<string>("");
+    const [editingIsSolution, setEditingIsSolution] = useState<boolean>(false);
+
+    const invalidate = useInvalidate();
+
+    // Fetch timeline entries for this complaint
+    const { data: timelineData, refetch: refetchTimeline } = useList<ComplaintTimeline>({
+        resource: "app_complaint_timeline",
+        filters: [
+            { field: "fk_complaint", operator: "eq", value: id }
+        ],
+        sorters: [
+            { field: "created_at", order: "desc" }
+        ],
+        queryOptions: {
+            enabled: !!id,
+        },
+        meta: {
+            select: "*, created_by!inner(full_name, username)"
+        }
+    });
+
+    // Create mutation for timeline entries
+    const { mutate: createTimelineEntry, isLoading: isCreatingTimeline } = useCreate();
+    const { mutate: deleteTimelineEntry } = useDelete();
+    const { mutate: updateTimelineEntry, isLoading: isUpdatingTimeline } = useUpdate();
 
     // Load initial values from complaint when editing
     useEffect(() => {
@@ -96,6 +141,80 @@ export default function EditReklamationButton<Complaints>({id}: {id: string}) {
             editFormProps.form?.setFieldValue("fk_app_orders_id", null);
             editFormProps.form?.setFieldValue("fk_app_order_items_id", null);
         }
+    };
+
+    const handleAddTimelineEntry = () => {
+        if (!timelineMessage.trim()) return;
+
+        createTimelineEntry({
+            resource: "app_complaint_timeline",
+            values: {
+                fk_complaint: id,
+                message: timelineMessage,
+                is_solution: isSolution,
+            },
+        }, {
+            onSuccess: () => {
+                setTimelineMessage("");
+                setIsSolution(false);
+                refetchTimeline();
+                invalidate({
+                    resource: "app_complaint_timeline",
+                    invalidates: ["list"],
+                });
+            }
+        });
+    };
+
+    const handleDeleteTimelineEntry = (entryId: number) => {
+        deleteTimelineEntry({
+            resource: "app_complaint_timeline",
+            id: entryId,
+        }, {
+            onSuccess: () => {
+                refetchTimeline();
+                invalidate({
+                    resource: "app_complaint_timeline",
+                    invalidates: ["list"],
+                });
+            }
+        });
+    };
+
+    const handleEditTimelineEntry = (entry: any) => {
+        setEditingTimelineId(entry.id);
+        setEditingMessage(entry.message || "");
+        setEditingIsSolution(entry.is_solution || false);
+    };
+
+    const handleSaveEdit = () => {
+        if (!editingTimelineId || !editingMessage.trim()) return;
+
+        updateTimelineEntry({
+            resource: "app_complaint_timeline",
+            id: editingTimelineId,
+            values: {
+                message: editingMessage,
+                is_solution: editingIsSolution,
+            },
+        }, {
+            onSuccess: () => {
+                setEditingTimelineId(null);
+                setEditingMessage("");
+                setEditingIsSolution(false);
+                refetchTimeline();
+                invalidate({
+                    resource: "app_complaint_timeline",
+                    invalidates: ["list"],
+                });
+            }
+        });
+    };
+
+    const handleCancelEdit = () => {
+        setEditingTimelineId(null);
+        setEditingMessage("");
+        setEditingIsSolution(false);
     };
 
     const order = orderData?.data;
@@ -241,6 +360,133 @@ export default function EditReklamationButton<Complaints>({id}: {id: string}) {
                     >
                         <Input.TextArea rows={3} />
                     </Form.Item>
+
+                    <Divider>Timeline</Divider>
+
+                    {/* Timeline Eingabe */}
+                    <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
+                        <Input.TextArea
+                            placeholder="Neuer Timeline-Eintrag..."
+                            value={timelineMessage}
+                            onChange={(e) => setTimelineMessage(e.target.value)}
+                            rows={2}
+                            style={{ flex: 1 }}
+                            onPressEnter={(e) => {
+                                if (e.shiftKey) return; // Allow Shift+Enter for new line
+                                e.preventDefault();
+                                handleAddTimelineEntry();
+                            }}
+                        />
+                    </Space.Compact>
+                    
+                    <Space style={{ width: '100%', justifyContent: 'space-between', marginBottom: 16 }}>
+                        <Checkbox 
+                            checked={isSolution}
+                            onChange={(e) => setIsSolution(e.target.checked)}
+                        >
+                            Als Lösung markieren
+                        </Checkbox>
+                        <Button
+                            type="primary"
+                            icon={<SendOutlined />}
+                            onClick={handleAddTimelineEntry}
+                            loading={isCreatingTimeline}
+                            disabled={!timelineMessage.trim()}
+                        >
+                            Hinzufügen
+                        </Button>
+                    </Space>
+
+                    {/* Timeline Darstellung */}
+                    {timelineData && timelineData.data && timelineData.data.length > 0 && (
+                        <Timeline
+                            style={{ marginTop: 24 }}
+                            items={timelineData.data.map((entry: any) => ({
+                                color: entry.is_solution ? 'green' : 'blue',
+                                children: (
+                                    <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <Typography.Text strong>
+                                                    {entry.created_by?.full_name || entry.created_by?.username || 'Unbekannt'}
+                                                </Typography.Text>
+                                                <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: '0.9em' }}>
+                                                    {dayjs(entry.created_at).format('DD.MM.YYYY HH:mm')}
+                                                </Typography.Text>
+                                                {entry.is_solution && (
+                                                    <Typography.Text type="success" style={{ marginLeft: 8 }}>
+                                                        • Lösung
+                                                    </Typography.Text>
+                                                )}
+                                            </div>
+                                            <Space size="small">
+                                                <Tooltip title="Bearbeiten">
+                                                    <Button
+                                                        type="text"
+                                                        size="small"
+                                                        icon={<EditOutlined />}
+                                                        onClick={() => handleEditTimelineEntry(entry)}
+                                                    />
+                                                </Tooltip>
+                                                <Popconfirm
+                                                    title="Eintrag löschen?"
+                                                    description="Möchten Sie diesen Timeline-Eintrag wirklich löschen?"
+                                                    onConfirm={() => handleDeleteTimelineEntry(entry.id)}
+                                                    okText="Ja"
+                                                    cancelText="Nein"
+                                                >
+                                                    <Tooltip title="Löschen">
+                                                        <Button
+                                                            type="text"
+                                                            size="small"
+                                                            danger
+                                                            icon={<DeleteOutlined />}
+                                                        />
+                                                    </Tooltip>
+                                                </Popconfirm>
+                                            </Space>
+                                        </div>
+                                        {editingTimelineId === entry.id ? (
+                                            <div style={{ marginTop: 8 }}>
+                                                <Input.TextArea
+                                                    value={editingMessage}
+                                                    onChange={(e) => setEditingMessage(e.target.value)}
+                                                    rows={2}
+                                                    style={{ marginBottom: 8 }}
+                                                />
+                                                <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                                                    <Checkbox
+                                                        checked={editingIsSolution}
+                                                        onChange={(e) => setEditingIsSolution(e.target.checked)}
+                                                    >
+                                                        Als Lösung markieren
+                                                    </Checkbox>
+                                                    <Space>
+                                                        <Button size="small" onClick={handleCancelEdit}>
+                                                            Abbrechen
+                                                        </Button>
+                                                        <Button
+                                                            type="primary"
+                                                            size="small"
+                                                            onClick={handleSaveEdit}
+                                                            loading={isUpdatingTimeline}
+                                                            disabled={!editingMessage.trim()}
+                                                        >
+                                                            Speichern
+                                                        </Button>
+                                                    </Space>
+                                                </Space>
+                                            </div>
+                                        ) : (
+                                            <div style={{ marginTop: 4 }}>
+                                                <Typography.Text>{entry.message}</Typography.Text>
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            }))}
+                        />
+                    )}
                 </Form>
             </Modal>
         </>
