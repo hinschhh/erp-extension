@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge, Space, Button } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { PlusOutlined, CaretDownOutlined, CaretRightOutlined } from "@ant-design/icons";
 import { useDroppable, UseDroppableArguments } from "@dnd-kit/core";
 import { TextField } from "@refinedev/antd";
 import AddReklamationButton from "./AddReklamationButton";
@@ -13,10 +13,12 @@ type Props = {
     count: number, 
     data?: UseDroppableArguments['data'],
     onAddClick?: (args: {id: string}) => void,
-
+    isCollapsed?: boolean,
+    isCompletedStage?: boolean,
+    onToggleCollapse?: () => void,
 }
 
-export default function StageSpalte({children, id, title, description, count, data, onAddClick}: React.PropsWithChildren<Props>) {
+export default function StageSpalte({children, id, title, description, count, data, onAddClick, isCollapsed, isCompletedStage, onToggleCollapse}: React.PropsWithChildren<Props>) {
 
     const {isOver, setNodeRef, active } = useDroppable({id, data});
 
@@ -28,8 +30,8 @@ export default function StageSpalte({children, id, title, description, count, da
                 display: "flex",
                 flexDirection: "column",
                 padding: "0 8px",
-                flex: 1,
-                minWidth: 0,
+                flex: isCollapsed ? "0 0 auto" : 1,
+                minWidth: isCollapsed ? "200px" : 0,
                 alignSelf: "flex-start",
             }}
         >
@@ -40,7 +42,18 @@ export default function StageSpalte({children, id, title, description, count, da
                 }}
             >
                 <Space style={{width: '100%', justifyContent: 'space-between'}} >
-                    <Space>
+                    <Space 
+                        style={{ cursor: isCompletedStage ? 'pointer' : 'default' }}
+                        onClick={isCompletedStage ? onToggleCollapse : undefined}
+                    >
+                        {isCompletedStage && (
+                            <Button 
+                                type="text" 
+                                size="small" 
+                                icon={isCollapsed ? <CaretRightOutlined /> : <CaretDownOutlined />}
+                                style={{ padding: 0, minWidth: 'auto' }}
+                            />
+                        )}
                         <TextField
                             value={title}
                             strong
@@ -51,24 +64,26 @@ export default function StageSpalte({children, id, title, description, count, da
                        />
                         {!! count && <Badge count={count} color="cyan" />}
                     </Space>
-                    <AddReklamationButton onAddClickAction={onAddClick} id={id} />
+                    {!isCollapsed && <AddReklamationButton onAddClickAction={onAddClick} id={id} />}
 
                 </Space>
-                {description}
+                {!isCollapsed && description}
             </div>
-            <div
-                style={{
-                    flex: 1,
-                    overflowY: active ? 'unset' : 'auto',
-                    border: '2px dashed transparent',
-                    borderColor: isOver ? '#000040' : 'transparent',
-                    borderRadius: '4px',
-                }}
-            >
-                <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {children}
+            {!isCollapsed && (
+                <div
+                    style={{
+                        flex: 1,
+                        overflowY: active ? 'unset' : 'auto',
+                        border: '2px dashed transparent',
+                        borderColor: isOver ? '#000040' : 'transparent',
+                        borderRadius: '4px',
+                    }}
+                >
+                    <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {children}
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
 
     );

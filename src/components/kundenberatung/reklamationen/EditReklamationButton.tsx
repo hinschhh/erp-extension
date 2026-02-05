@@ -4,7 +4,7 @@ import { MenuOutlined, SendOutlined, EditOutlined, DeleteOutlined } from "@ant-d
 import { useModalForm, useSelect } from "@refinedev/antd";
 import { useOne, useCreate, useList, useInvalidate, useDelete, useUpdate } from "@refinedev/core";
 import { Tables } from "@/types/supabase";
-import { Button, Cascader, Checkbox, Descriptions, Divider, Form, Input, Modal, Popconfirm, Select, Space, Switch, Timeline, Tooltip, Typography } from "antd";
+import { Button, Cascader, Checkbox, Descriptions, Divider, Form, Input, Modal, Popconfirm, Select, Space, Switch, Timeline, Tooltip, Typography, Dropdown, Menu } from "antd";
 import { useOrderItemCascader } from "@components/common/selects/cascader_order_items";
 import { useState, useEffect } from "react";
 import dayjs from "dayjs";
@@ -99,6 +99,7 @@ export default function EditReklamationButton<Complaints>({id}: {id: string}) {
     const { mutate: createTimelineEntry, isLoading: isCreatingTimeline } = useCreate();
     const { mutate: deleteTimelineEntry } = useDelete();
     const { mutate: updateTimelineEntry, isLoading: isUpdatingTimeline } = useUpdate();
+    const { mutate: deleteComplaint, isLoading: isDeletingComplaint } = useDelete();
 
     // Load initial values from complaint when editing
     useEffect(() => {
@@ -229,17 +230,65 @@ export default function EditReklamationButton<Complaints>({id}: {id: string}) {
         setEditingIsSolution(false);
     };
 
+    const handleDeleteComplaint = () => {
+        deleteComplaint({
+            resource: "app_complaints",
+            id: id,
+        }, {
+            onSuccess: () => {
+                editModalProps.onCancel?.({} as any);
+                invalidate({
+                    resource: "app_complaints",
+                    invalidates: ["list"],
+                });
+            }
+        });
+    };
+
     const order = orderData?.data;
     const orderItem = orderItemData?.data;
 
+    const menuItems = [
+        {
+            key: 'edit',
+            icon: <EditOutlined />,
+            label: 'Bearbeiten',
+            onClick: () => showEditModal(id),
+        },
+        {
+            key: 'delete',
+            icon: <DeleteOutlined />,
+            label: 'Löschen',
+            danger: true,
+        },
+    ];
+
     return (
         <>
-            <Button 
-                size="small" 
-                shape="circle" 
-                onClick={() => showEditModal(id)} 
-                icon={<MenuOutlined />} 
-            />
+            <Dropdown
+                menu={{
+                    items: menuItems,
+                    onClick: ({ key }) => {
+                        if (key === 'delete') {
+                            Modal.confirm({
+                                title: 'Reklamation löschen',
+                                content: 'Möchten Sie diese Reklamation wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.',
+                                okText: 'Ja, löschen',
+                                cancelText: 'Abbrechen',
+                                okType: 'danger',
+                                onOk: handleDeleteComplaint,
+                            });
+                        }
+                    },
+                }}
+                trigger={['click']}
+            >
+                <Button 
+                    size="small" 
+                    shape="circle" 
+                    icon={<MenuOutlined />} 
+                />
+            </Dropdown>
             <Modal 
                 title="Reklamation bearbeiten" 
                 {...editModalProps} >

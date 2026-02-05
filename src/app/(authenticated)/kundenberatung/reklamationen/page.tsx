@@ -33,6 +33,8 @@ type StagesWithComplaints = Stages & {
 
 
 export default function PageComplaints() {
+  const [collapsedStages, setCollapsedStages] = React.useState<Set<string>>(new Set());
+
   const { data: stages, isLoading: isLoadingStages } = useList<Stages>({
     resource: "app_complaints_stages",
     sorters: [{ field: "id", order: "asc" }],
@@ -71,9 +73,47 @@ export default function PageComplaints() {
   
   }, [stages, complaints])
 
+  // Automatisch alle erledigten Stages einklappen beim ersten Laden
+  React.useEffect(() => {
+    if (!complaintsStages.columns || complaintsStages.columns.length === 0) return;
+    
+    const completedStageIds = complaintsStages.columns
+      .filter(stage => isCompletedStage(stage.name))
+      .map(stage => stage.id);
+    
+    if (completedStageIds.length > 0 && collapsedStages.size === 0) {
+      setCollapsedStages(new Set(completedStageIds));
+    }
+  }, [stages?.data]); // Nur abhängig von stages data, nicht von complaintsStages
+
   const handleAddCard = (params: { stageId: string }) => {
     console.log("Add card to stage:", params.stageId);
   }
+
+  const isCompletedStage = (stageName: string | null) => {
+    if (!stageName) return false;
+    const lowerName = stageName.toLowerCase();
+    return lowerName.includes('erledigt') || 
+           lowerName.includes('abgeschlossen') || 
+           lowerName.includes('geschlossen') || 
+           lowerName.includes('fertig') ||
+           lowerName.includes('beendet') ||
+           lowerName.includes('completed') ||
+           lowerName.includes('finished') ||
+           lowerName.includes('done');
+  };
+
+  const handleToggleStage = (stageId: string) => {
+    setCollapsedStages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(stageId)) {
+        newSet.delete(stageId);
+      } else {
+        newSet.add(stageId);
+      }
+      return newSet;
+    });
+  };
 
   const handleOnDragEnd = (event: DragEndEvent) => {
     let stageId = event.over?.id as undefined | string | null;
@@ -109,8 +149,11 @@ export default function PageComplaints() {
               title={column.name as string}
               count={column.complaints.length || 0}
               onAddClick={() => handleAddCard({ stageId: column.id })}
+              isCollapsed={collapsedStages.has(column.id)}
+              isCompletedStage={isCompletedStage(column.name)}
+              onToggleCollapse={() => handleToggleStage(column.id)}
             >
-              {column.complaints.map((complaint) => {
+              {!collapsedStages.has(column.id) && column.complaints.map((complaint) => {
                 const complaintWithRelations = complaint as ComplaintsWithRelations;
                 return (
                 <Reklamation
