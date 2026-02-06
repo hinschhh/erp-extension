@@ -109,36 +109,62 @@ export const useOrderItemCascader = (
     const [searchTerm, setSearchTerm] = useState<string>("");
 
     // Filter für Orders aufbauen
-    const orderFilters = useMemo(() => {
-        const baseFilters = filters ?? [];
-        
-        if (!searchTerm) return baseFilters;
-        
-        // Suche in Order-Nummer und Kundenname
+    const orderFiltersBase = useMemo(() => filters ?? [], [filters]);
+    
+    const orderNumberFilters = useMemo(() => {
+        if (!searchTerm) return orderFiltersBase;
         return [
-            ...baseFilters,
-            {
-                operator: "or",
-                value: [
-                    { field: "bb_OrderNumber", operator: "contains", value: searchTerm },
-                    { field: "app_customers.bb_Name", operator: "contains", value: searchTerm },
-                ],
+            ...orderFiltersBase,
+            { 
+                field: "bb_OrderNumber", 
+                operator: "contains", 
+                value: searchTerm 
             },
         ];
-    }, [filters, searchTerm]);
+    }, [orderFiltersBase, searchTerm]);
 
-    // Ebene 1: Orders laden (letzte 500)
-    const { data: ordersData, isLoading: loadingOrders } = useList<Order>({
+    const customerNameFilters = useMemo(() => {
+        if (!searchTerm) return [];
+        return [
+            ...orderFiltersBase,
+            { 
+                field: "app_customers.bb_Name", 
+                operator: "contains", 
+                value: searchTerm 
+            },
+        ];
+    }, [orderFiltersBase, searchTerm]);
+
+    // Query 1: Orders nach Bestellnummer suchen
+    const { data: ordersByNumberData, isLoading: loadingOrdersByNumber } = useList<Order>({
         resource: "app_orders",
         pagination: { 
             current: 1, 
-            pageSize: 1200,
+            pageSize: 600,
             mode: "server"
         },
-        filters: orderFilters,
+        filters: orderNumberFilters,
         sorters: [{ field: "id", order: "desc" }],
         meta: {
             select: "*, app_customers(bb_Name)",
+        },
+    });
+
+    // Query 2: Orders nach Kundenname suchen (nur wenn searchTerm vorhanden)
+    const { data: ordersByCustomerData, isLoading: loadingOrdersByCustomer } = useList<Order>({
+        resource: "app_orders", 
+        pagination: { 
+            current: 1,
+            pageSize: 600,
+            mode: "server"
+        },
+        filters: customerNameFilters,
+        sorters: [{ field: "id", order: "desc" }],
+        meta: {
+            select: "*, app_customers(bb_Name)",
+        },
+        queryOptions: {
+            enabled: !!searchTerm,
         },
     });
 
@@ -157,16 +183,24 @@ export const useOrderItemCascader = (
         },
     });
 
-    // Orders zusammenführen
+    // Orders zusammenführen: search results + current orders
     const mergedOrders = useMemo(() => {
-        const orders = ordersData?.data ?? [];
+        const ordersByNumber = ordersByNumberData?.data ?? [];
+        const ordersByCustomer = ordersByCustomerData?.data ?? [];
         const currentOrders = currentOrdersData?.data ?? [];
-        
-        const existingIds = new Set(orders.map(o => o.id));
-        const additionalOrders = currentOrders.filter(o => !existingIds.has(o.id));
-        
-        return [...additionalOrders, ...orders];
-    }, [ordersData?.data, currentOrdersData?.data]);
+
+        // Duplikate vermeiden durch ID-Set
+        const uniqueOrders = new Map<number, Order>();
+
+        // Alle Orders sammeln
+        [...ordersByNumber, ...ordersByCustomer, ...currentOrders].forEach(order => {
+            if (order.id && !uniqueOrders.has(order.id as number)) {
+                uniqueOrders.set(order.id as number, order);
+            }
+        });
+
+        return Array.from(uniqueOrders.values());
+    }, [ordersByNumberData?.data, ordersByCustomerData?.data, currentOrdersData?.data]);
 
     // Order-IDs für Item-Abfrage sammeln
     const orderIds = useMemo(
@@ -228,7 +262,7 @@ export const useOrderItemCascader = (
 
     return {
         options,
-        loading: loadingOrders || loadingItems || loadingCurrentOrders || loadingCurrentItems,
+        loading: loadingOrdersByNumber || loadingOrdersByCustomer || loadingItems || loadingCurrentOrders || loadingCurrentItems,
         onSearch: handleSearch,
     };
 };
