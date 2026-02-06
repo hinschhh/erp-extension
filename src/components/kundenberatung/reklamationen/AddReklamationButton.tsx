@@ -47,7 +47,7 @@ export default function AddReklamationButton({ onAddClickAction, id }: Props) {
         [],
         [],
         [
-            { field: "bb_ShippedAt", operator: "ne", value: null }
+            { field: "bb_ShippedAt", operator: "nnull", value: null }
         ]
     );
     const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
