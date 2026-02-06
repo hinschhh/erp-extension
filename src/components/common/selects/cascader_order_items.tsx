@@ -132,10 +132,11 @@ export const useOrderItemCascader = (
         resource: "app_orders",
         pagination: { 
             current: 1, 
-            pageSize: 500
+            pageSize: 1200,
+            mode: "server"
         },
         filters: orderFilters,
-        sorters: [{ field: "created_at", order: "desc" }],
+        sorters: [{ field: "id", order: "desc" }],
         meta: {
             select: "*, app_customers(bb_Name)",
         },
@@ -177,6 +178,7 @@ export const useOrderItemCascader = (
     const { data: itemsData, isLoading: loadingItems } = useList<OrderItem>({
         resource: "app_order_items",
         pagination: { mode: "off" },
+        sorters: [{ field: "created_at", order: "desc" }],
         filters: orderIds.length > 0
             ? [{ field: "fk_app_orders_id", operator: "in", value: orderIds }]
             : [],
