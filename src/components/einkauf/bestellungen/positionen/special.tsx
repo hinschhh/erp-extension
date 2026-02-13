@@ -95,8 +95,7 @@ export default function EinkaufBestellpositionenSpecialBearbeiten({orderId, supp
         existingOrderIds,
         existingItemIds,
         [
-          { field: "bb_ShippedAt", operator: "null" },
-          { field: "bb_State", operator: "in", value: [1, 2, 3, 16] }
+          
         ]
       );
 

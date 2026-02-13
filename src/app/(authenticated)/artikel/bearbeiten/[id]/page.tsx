@@ -145,10 +145,10 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
     })) ?? [];
 
   const ekBOM = components.reduce(
-    (s, c) => s + (c.qty ?? 1) * Number(c.bb_net_purchase_price ?? 0),
+    (s, c) => s + (c.qty ?? 1) * Number(c.cost_price ?? 0),
     0,
   );
-  const ekNetto = p?.bb_is_bom ? ekBOM : Number(p?.bb_net_purchase_price ?? 0);
+  const ekNetto = p?.bb_is_bom ? ekBOM : Number(p?.bb_costnet ?? 0);
 
   /* ---------- „Verwendet in …“ (nur für Komponenten) ---------- */
   const { data: usedInRecipeRes } = useList<Tables<"bom_recipes">, HttpError>({
@@ -556,7 +556,7 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
                 { title: "Menge", dataIndex: "qty", width: 100, render: (v: number) => v ?? 1 },
                 {
                   title: "EK (netto) je",
-                  dataIndex: "bb_net_purchase_price",
+                  dataIndex: "cost_price",
                   width: 140,
                   render: (v: number | null) => currency(v),
                 },
@@ -564,7 +564,7 @@ export default function ArtikelEditPage({ params }: { params: { id: string } }) 
                   title: "EK (netto) gesamt",
                   key: "row_total",
                   width: 160,
-                  render: (_: any, r) => currency((r.qty ?? 1) * Number(r.bb_net_purchase_price ?? 0)),
+                  render: (_: any, r) => currency((r.qty ?? 1) * Number(r.cost_price ?? 0)),
                 },
                 { title: "Externe Art.-Nr.", dataIndex: "supplier_sku", width: 180, ellipsis: true },
                 {

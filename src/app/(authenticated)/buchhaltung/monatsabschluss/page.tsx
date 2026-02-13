@@ -73,12 +73,12 @@ type OrderItem = Tables<"app_order_items"> & {
     bb_sku?: string | null;
     inventory_cagtegory?: string | null;
     is_antique?: boolean | null;
-    bb_net_purchase_price?: number | null;
+    bb_costnet?: number | null;
     bom_recipes?: {
       quantity?: number | null;
       billbee_component?: {
         bb_sku?: string | null;
-        bb_net_purchase_price?: number | null;
+        cost_price?: number | null;
         inventory_cagtegory?: string | null;
       } | null;
     }[] | null;
@@ -196,9 +196,9 @@ const getOrderItemQuantity = (item: OrderItem): number => {
 
 /**
  * Calculate cost of material per order item based on product type:
- * 1. Normal product: bb_net_purchase_price
- * 2. BOM product: sum(component.qty * component.bb_net_purchase_price)
- * 3. Antique product: bb_net_purchase_price OR 300.00 default (if 0 or null)
+ * 1. Normal product: bb_costnet (total cost including acquisition costs)
+ * 2. BOM product: sum(component.qty * component.cost_price) 
+ * 3. Antique product: bb_costnet OR 300.00 default (if 0 or null)
  * 4. Special product: unit_price_net from app_purchase_orders_positions_special OR 0 if not linked
  */
 const calculateMaterialCost = (item: OrderItem): number => {
@@ -224,7 +224,7 @@ const calculateMaterialCost = (item: OrderItem): number => {
   if (recipes.length > 0) {
     const bomCost = recipes.reduce((acc, recipe) => {
       const componentQty = Number(recipe.quantity ?? 0);
-      const componentPrice = Number(recipe.billbee_component?.bb_net_purchase_price ?? 0);
+      const componentPrice = Number(recipe.billbee_component?.cost_price ?? 0);
       return acc + (componentQty * componentPrice);
     }, 0);
     return bomCost * quantity;
@@ -232,14 +232,14 @@ const calculateMaterialCost = (item: OrderItem): number => {
 
   // 3. Antique product
   if (product.is_antique === true) {
-    const purchasePrice = Number(product.bb_net_purchase_price ?? 0);
+    const purchasePrice = Number(product.bb_costnet ?? 0);
     // Use 300 EUR default if price is 0 or not set
     const antiquePrice = purchasePrice > 0 ? purchasePrice : 300;
     return antiquePrice * quantity;
   }
 
   // 1. Normal product
-  const normalPrice = Number(product.bb_net_purchase_price ?? 0);
+  const normalPrice = Number(product.bb_costnet ?? 0);
   return normalPrice * quantity;
 };
 
@@ -278,7 +278,7 @@ const expandOrderItems = (items: OrderItem[]): ExpandedOrderItem[] => {
         const componentCategory = recipe.billbee_component?.inventory_cagtegory ?? null;
         const componentSku = recipe.billbee_component?.bb_sku ?? null;
         const componentQty = Number(recipe.quantity ?? 0);
-        const componentPrice = Number(recipe.billbee_component?.bb_net_purchase_price ?? 0);
+        const componentPrice = Number(recipe.billbee_component?.cost_price ?? 0);
         const itemQty = Number(item.bb_Quantity ?? 0);
         const componentCost = componentQty * componentPrice * itemQty;
 
@@ -328,7 +328,7 @@ const calculateExpandedItemCost = (item: ExpandedOrderItem): number => {
       const componentCategory = recipe.billbee_component?.inventory_cagtegory ?? null;
       if (componentCategory === targetCategory) {
         const componentQty = Number(recipe.quantity ?? 0);
-        const componentPrice = Number(recipe.billbee_component?.bb_net_purchase_price ?? 0);
+        const componentPrice = Number(recipe.billbee_component?.cost_price ?? 0);
         return acc + (componentQty * componentPrice);
       }
       return acc;
@@ -483,7 +483,7 @@ export default function MonatsabschlussPage() {
     resource: "app_order_items",
     meta: {
       select:
-        "id, bb_Quantity, app_orders!inner(id, bb_InvoiceDate, bb_OrderNumber, app_customers(bb_Name)), app_products(bb_sku, inventory_cagtegory, is_antique, bb_net_purchase_price, bom_recipes!bom_recipes_billbee_bom_id_fkey(quantity, billbee_component:app_products!bom_recipes_billbee_component_id_fkey(bb_sku, bb_net_purchase_price, inventory_cagtegory))), app_purchase_orders_positions_special(unit_price_net)",
+        "id, bb_Quantity, app_orders!inner(id, bb_InvoiceDate, bb_OrderNumber, app_customers(bb_Name)), app_products(bb_sku, inventory_cagtegory, is_antique, bb_costnet, bom_recipes!bom_recipes_billbee_bom_id_fkey(quantity, billbee_component:app_products!bom_recipes_billbee_component_id_fkey(bb_sku, cost_price, inventory_cagtegory))), app_purchase_orders_positions_special(unit_price_net)",
     },
     pagination: { mode: "off" },
     filters: outboundFilters,
@@ -1087,7 +1087,7 @@ export default function MonatsabschlussPage() {
                           {zeroCostValidation.length > 10 && <li>... und {zeroCostValidation.length - 10} weitere</li>}
                         </ul>
                         <Typography.Text type="secondary">
-                          Mögliche Ursachen: Fehlende Einkaufspreise (bb_net_purchase_price), fehlende BOM-Komponenten,
+                          Mögliche Ursachen: Fehlende Einkaufspreise (cost_price/bb_CostNet), fehlende BOM-Komponenten,
                           nicht verknüpfte Sonderbestellungen, oder Antiquitäten ohne Preis.
                         </Typography.Text>
                       </div>

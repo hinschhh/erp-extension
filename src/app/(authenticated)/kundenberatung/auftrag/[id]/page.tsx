@@ -25,13 +25,13 @@ export default function PageAuftragAnzeigen() {
                     app_products(
                         bb_sku, 
                         bb_name, 
-                        bb_net_purchase_price, 
+                        bb_costnet, 
                         is_antique,
                         bb_is_bom,
                         bom_recipes!bom_recipes_billbee_bom_id_fkey(
                             quantity, 
                             billbee_component:app_products!bom_recipes_billbee_component_id_fkey(
-                                bb_net_purchase_price
+                                bb_costnet
                             )
                         )
                     ), 
@@ -46,6 +46,11 @@ export default function PageAuftragAnzeigen() {
     const items = order?.app_order_items || [];
     const itemsActive = items.filter((item: OrderItems) => item.is_active);
     const customer = order?.app_customers;
+
+    // Zahlungsberechnungen
+    const totalCost = order?.bb_TotalCost || 0;
+    const paidAmount = order?.bb_PaidAmount || 0;
+    const openAmount = totalCost - paidAmount;
 
     console.log("Order ID:", orderId);
 
@@ -103,6 +108,52 @@ export default function PageAuftragAnzeigen() {
                             </Descriptions.Item>
                             <Descriptions.Item label="Land">{customer?.bb_CountryCode || "—"}</Descriptions.Item>
                         </Descriptions>
+                    </Card>
+                    
+                    <Card title="Zahlungsübersicht" style={{ marginTop: 8 }}>
+                        <Descriptions column={1} size="small">
+                            <Descriptions.Item label="Bestellsumme Brutto">
+                                <Typography.Text strong>
+                                    {totalCost > 0 ? `€ ${Number(totalCost).toFixed(2)}` : "€ 0,00"}
+                                </Typography.Text>
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Bezahlt">
+                                <Typography.Text strong style={{ color: paidAmount > 0 ? "#52c41a" : "#8c8c8c" }}>
+                                    {paidAmount > 0 ? `€ ${Number(paidAmount).toFixed(2)}` : "€ 0,00"}
+                                </Typography.Text>
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Offen">
+                                <Typography.Text 
+                                    strong 
+                                    style={{ 
+                                        color: openAmount > 0 ? "#faad14" : openAmount < 0 ? "#f5222d" : "#52c41a" 
+                                    }}
+                                >
+                                    {openAmount !== 0 ? `€ ${Number(openAmount).toFixed(2)}` : "€ 0,00"}
+                                </Typography.Text>
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Zahlungsdatum">
+                                {order?.bb_PayedAt 
+                                    ? new Date(order.bb_PayedAt).toLocaleDateString("de-DE") 
+                                    : "—"}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Zahlungsart">
+                                {order?.bb_PaymentMethod || "—"}
+                            </Descriptions.Item>
+                        </Descriptions>
+                        
+                        <div style={{ marginTop: 16, padding: "8px 12px", backgroundColor: "#fafafa", borderRadius: "6px", borderLeft: "3px solid #1890ff" }}>
+                            <Typography.Text style={{ fontSize: '13px', fontWeight: 500 }}>
+                                Zahlungsstatus: {" "}
+                                {openAmount <= 0 && paidAmount > 0 ? (
+                                    <Typography.Text type="success" strong>Vollständig bezahlt</Typography.Text>
+                                ) : paidAmount > 0 ? (
+                                    <Typography.Text style={{ color: "#faad14" }} strong>Teilweise bezahlt</Typography.Text>
+                                ) : (
+                                    <Typography.Text type="secondary" strong>Unbezahlt</Typography.Text>
+                                )}
+                            </Typography.Text>
+                        </div>
                     </Card>
                 </Col>
             </Row>

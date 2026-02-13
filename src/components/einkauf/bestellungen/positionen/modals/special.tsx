@@ -99,11 +99,11 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
     const ausGrundmodellKopieren = async () => {
         const { data, error } = await dataProvider
             .from("app_products")
-            .select("supplier_sku, bb_net_purchase_price, purchase_details")
+            .select("supplier_sku, cost_price, purchase_details")
             .eq("id", form.getFieldValue("base_model_billbee_product_id"))
             .single<{
                 supplier_sku: string | null;
-                bb_net_purchase_price: number | null;
+                cost_price: number | null;
                 purchase_details: string | null;
             }>();
 
@@ -115,7 +115,7 @@ export default function ButtonEinkaufBestellpositionenSpezialHinzufuegen({orderI
 
         form.setFieldsValue({
             supplier_sku: product?.supplier_sku ?? "",
-            unit_price_net: product?.bb_net_purchase_price ?? 0,
+            unit_price_net: product?.cost_price ?? 0,
             details_override: product?.purchase_details ?? "",
         });
     };

@@ -92,6 +92,11 @@ export default function InboundShipmentsList({itemsNormal, itemsSpecial, title}:
                                 <Typography.Text style={{textAlign: "end"}}>
                                     {formatEUR((item.app_purchase_orders_positions_normal?.unit_price_net ?? 0) * (item.quantity_delivered ?? 0))}
                                 </Typography.Text>
+                                {typeof item.shipping_costs_proportional === "number" && (
+                                    <Typography.Text type="secondary" style={{textAlign: "end"}}>
+                                        zzgl. {formatEUR(item.shipping_costs_proportional)}
+                                    </Typography.Text>
+                                )}
                             </Space>
                         </Col>
                         <Col span={3}>
@@ -141,18 +146,23 @@ export default function InboundShipmentsList({itemsNormal, itemsSpecial, title}:
                         <Col span={3}>
                             <Space direction="vertical" align="end">
                                 <Typography.Text style={{textAlign: "end"}}>
-                                    {formatQty(item.quantity_delivered)} von {formatQty(item.app_purchase_orders_positions_special?.qty_ordered)}
+                                    {formatEUR((item.app_purchase_orders_positions_special?.unit_price_net ?? 0) * (item.quantity_delivered ?? 0))}
                                 </Typography.Text>
-                                {item.quantity_delivered < (item.app_purchase_orders_positions_special?.qty_ordered ?? 0) && (
-                                    <Tag color={"orange"}>Teillieferung</Tag>
+                                {typeof item.shipping_costs_proportional === "number" && (
+                                    <Typography.Text type="secondary" style={{textAlign: "end"}}>
+                                        zzgl. {formatEUR(item.shipping_costs_proportional)}
+                                    </Typography.Text>
                                 )}
                             </Space>
                         </Col>
                         <Col span={3}>
                             <Space direction="vertical" align="end">
                                 <Typography.Text style={{textAlign: "end"}}>
-                                    {formatEUR((item.app_purchase_orders_positions_special?.unit_price_net ?? 0) * (item.quantity_delivered ?? 0))}
+                                    {formatQty(item.quantity_delivered)} von {formatQty(item.app_purchase_orders_positions_special?.qty_ordered)}
                                 </Typography.Text>
+                                {item.quantity_delivered < (item.app_purchase_orders_positions_special?.qty_ordered ?? 0) && (
+                                    <Tag color={"orange"}>Teillieferung</Tag>
+                                )}
                             </Space>
                         </Col>
                     </Row>

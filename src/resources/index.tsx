@@ -114,6 +114,14 @@ const resources: IResourceItem[] = [
     options: { label: "Artikelübersicht" },
   },
 
+  // Stücklisten - Materialkosten-Analyse
+  {
+    name: "bom_costs_analysis",
+    list: "/artikel/auswertungen/bom-costs",
+    parentName: "artikel",
+    options: { label: "Stücklisten-Materialkosten" },
+  },
+
   {
     name: "lager",
     options: { label: "Lager" },

@@ -72,19 +72,26 @@ export default function EinkaufsBestellungenÜbersicht() {
     setSearchValue(value);
   };
 
-  // Clientseitige Filterung nach Kundenname
+  // Clientseitige Filterung nach Kundenname, SKU und Bestellnummer
   const filteredDataSource = React.useMemo(() => {
     if (!searchValue || !tableProps.dataSource) return tableProps.dataSource;
 
     const searchLower = searchValue.toLowerCase();
     return tableProps.dataSource.filter((record: any) => {
-      // Prüfe, ob irgendeine Position einen Kunden mit passendem Namen hat
+      // Prüfe, ob irgendeine Position einen Kunden mit passendem Namen, SKU oder Bestellnummer hat
       return [
         ...(record.positions_normal || []),
         ...(record.positions_special || []),
       ].some((pos: any) => {
         const customerName = pos.app_orders?.app_customers?.bb_Name;
-        return customerName?.toLowerCase().includes(searchLower);
+        const orderNumber = pos.app_orders?.bb_OrderNumber;
+        const billbeeSku = pos.app_products?.bb_sku || pos.billbee_product_id;
+        
+        return (
+          (customerName && String(customerName).toLowerCase().includes(searchLower)) ||
+          (orderNumber && String(orderNumber).toLowerCase().includes(searchLower)) ||
+          (billbeeSku && String(billbeeSku).toLowerCase().includes(searchLower))
+        );
       });
     });
   }, [searchValue, tableProps.dataSource]);

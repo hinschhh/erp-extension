@@ -209,10 +209,24 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
     })) ?? [];
 
   const ekBOM = components.reduce(
-    (sum, c) => sum + (c.qty ?? 1) * Number(c.bb_net_purchase_price ?? 0),
+    (sum, c) => sum + (c.qty ?? 1) * Number(c.cost_price ?? 0),
     0,
   );
-  const ekNetto = p?.bb_is_bom ? ekBOM : Number(p?.bb_net_purchase_price ?? 0);
+  const ekNetto = p?.bb_is_bom ? ekBOM : Number(p?.bb_costnet ?? 0);
+
+  // Erweiterte Kostenberechnung
+  const costPrice = p?.bb_is_bom ? ekBOM : Number(p?.cost_price ?? 0); // Reiner Einkaufspreis (Warenwert)
+  const acquisitionCost = p?.bb_is_bom ? 0 : Number(p?.acquisition_cost ?? 0); // Beschaffungskosten pro Stück
+  const totalCost = ekNetto; // Gesamtkosten (bb_CostNet = cost_price + acquisition_cost)
+  
+  // Preisberechnung
+  const sellingPriceBrutto = Number(p?.bb_Price ?? 0);
+  const sellingPriceNetto = Number(p?.bb_Net ?? 0);
+  
+  // Margen und Kennzahlen (basiert auf Netto-Verkaufspreis)
+  const marginAbsolute = sellingPriceNetto - totalCost;
+  const marginPercentage = sellingPriceNetto > 0 ? (marginAbsolute / sellingPriceNetto) * 100 : 0;
+  const materialCostRatio = sellingPriceNetto > 0 ? (totalCost / sellingPriceNetto) * 100 : 0;
 
   /* ---------- „Verwendet in …“ (nur für Komponenten) ---------- */
   const { data: usedInRecipeRes } = useList<Tables<"bom_recipes">, HttpError>({
@@ -454,10 +468,42 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
 
       <Divider />
 
-      {/* Einkauf */}
-      <Descriptions column={1} bordered size="small" labelStyle={{ width: 260 }} title="Einkauf">
+      {/* Einkauf & Verkauf */}
+      <Descriptions column={1} bordered size="small" labelStyle={{ width: 260 }} title="Kosten & Preise">
         <Descriptions.Item label="Lieferant">{p?.fk_bb_supplier ?? "—"}</Descriptions.Item>
-        <Descriptions.Item label="EK (netto)">{currency(ekNetto)}</Descriptions.Item>
+        <Descriptions.Item label="Materialkosten (gesamt)">{currency(totalCost)}</Descriptions.Item>
+        {!p?.bb_is_bom && (
+          <>
+            <Descriptions.Item label="• Netto-Einkaufspreis">{currency(costPrice)}</Descriptions.Item>
+            <Descriptions.Item label="• Beschaffungskosten/Stk">{currency(acquisitionCost)}</Descriptions.Item>
+          </>
+        )}
+        <Descriptions.Item label="Verkaufspreis (brutto)">{currency(sellingPriceBrutto)}</Descriptions.Item>
+        <Descriptions.Item label="Verkaufspreis (netto)">{currency(sellingPriceNetto)}</Descriptions.Item>
+        <Descriptions.Item label="Materialkostenquote">
+          <span style={{ 
+            color: materialCostRatio <= 31 ? '#52c41a' : materialCostRatio <= 39 ? '#faad14' : '#ff4d4f',
+            fontWeight: 'bold'
+          }}>
+            {materialCostRatio.toFixed(1)}%
+          </span>
+          <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: '12px' }}>
+            ({currency(totalCost)} ÷ {currency(sellingPriceNetto)})
+          </Typography.Text>
+        </Descriptions.Item>
+        <Descriptions.Item label="Marge (absolut)">
+          <span style={{ color: marginAbsolute >= 0 ? '#52c41a' : '#ff4d4f', fontWeight: 'bold' }}>
+            {currency(marginAbsolute)}
+          </span>
+        </Descriptions.Item>
+        <Descriptions.Item label="Marge (prozentual)">
+          <span style={{ 
+            color: marginPercentage >= 68 ? '#52c41a' : marginPercentage >= 60 ? '#faad14' : '#ff4d4f',
+            fontWeight: 'bold'
+          }}>
+            {marginPercentage.toFixed(1)}%
+          </span>
+        </Descriptions.Item>
         {!p?.bb_is_bom && (
           <>
             <Descriptions.Item label="Externe Art.-Nr.">
@@ -602,7 +648,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
                 },
                 {
                   title: "EK (netto) je",
-                  dataIndex: "bb_net_purchase_price",
+                  dataIndex: "cost_price",
                   width: 140,
                   render: (v: number | null) => currency(v),
                 },
@@ -610,7 +656,7 @@ export default function ArtikelShowPage({ params }: { params: { id: string } }) 
                   title: "EK (netto) gesamt",
                   key: "row_total",
                   width: 160,
-                  render: (_: any, r) => currency((r.qty ?? 1) * Number(r.bb_net_purchase_price ?? 0)),
+                  render: (_: any, r) => currency((r.qty ?? 1) * Number(r.cost_price ?? 0)),
                 },
                 { title: "Externe Art.-Nr.", dataIndex: "supplier_sku", width: 180, ellipsis: true },
                 {

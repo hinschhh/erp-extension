@@ -206,10 +206,10 @@ export default function ArtikelListPage() {
         {/* EK netto */}
         <Table.Column<Row>
           title="EK (netto)"
-          dataIndex="bb_net_purchase_price"
+          dataIndex="bb_costnet"
           width={140}
           sorter
-          render={(v: Row["bb_net_purchase_price"]) =>
+          render={(v: Row["bb_costnet"]) =>
             v != null
               ? new Intl.NumberFormat("de-DE", {
                   style: "currency",

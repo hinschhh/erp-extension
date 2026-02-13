@@ -12,7 +12,7 @@ type Product = Tables<"app_products">;
 type ProductBOM = Tables<"bom_recipes"> & {
   component?: {
     bb_sku: string;
-    bb_net_purchase_price: number;
+    cost_price: number;
   };
 };
 type PurchaseOrderPosition = Tables<"app_purchase_orders_positions_normal">;
@@ -31,7 +31,7 @@ export default function ArtikelAnzeigenPage({ params }: { params: { id: string }
   const { tableProps: tablePropsBOM } = useTable<ProductBOM>({
     resource: "bom_recipes",
     meta: {
-      select: "*, component:app_products!bom_recipes_billbee_component_id_fkey(bb_sku, bb_net_purchase_price)",
+      select: "*, component:app_products!bom_recipes_billbee_component_id_fkey(bb_sku, cost_price)",
     },
     filters:{permanent: [{ field: "billbee_bom_id", operator: "eq", value: id }], mode: "server" },
   });
@@ -108,7 +108,7 @@ const chartData =
   };
 
   const bomMaterialCosts = tablePropsBOM?.dataSource?.reduce((sum, item) => {
-    const unitPrice = item.component?.bb_net_purchase_price ?? 0;
+    const unitPrice = item.component?.cost_price ?? 0;
     return sum + unitPrice * item.quantity;
   }, 0) ?? 0;
   const shippingCosts = 120.00;
@@ -161,7 +161,7 @@ const chartData =
                     <Table.Column title="ID" dataIndex="id" key="id" hidden/>
                     <Table.Column title="Menge" dataIndex="quantity" key="quantity" render={(value, item) => `${item.quantity} x`}/>
                     <Table.Column title="Komponente" dataIndex={["component", "bb_sku"]} key="bb_sku" render={(value, item) => <Link href={`/artikel/anzeigen/${item.component?.id}`}>{value}</Link>}/>
-                    <Table.Column title="Netto Einkaufspreis" dataIndex={["component", "bb_net_purchase_price"]} key="bb_net_purchase_price" align="right"/>
+                    <Table.Column title="Netto Einkaufspreis" dataIndex={["component", "cost_price"]} key="cost_price" align="right"/>
                 </Table>
               </Row>
             </Col>

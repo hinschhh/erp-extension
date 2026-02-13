@@ -7,12 +7,12 @@ import Link from "next/link";
 type BomRecipe = {
     quantity?: number | null;
     billbee_component?: {
-        bb_net_purchase_price?: number | null;
+        cost_price?: number | null;
     } | null;
 };
 
 type OrderItems = Tables<"app_order_items"> & {
-    app_products?: (Pick<Tables<"app_products">, "bb_name" | "bb_sku" | "bb_net_purchase_price" | "is_antique" | "bb_is_bom"> & {
+    app_products?: (Pick<Tables<"app_products">, "bb_name" | "bb_sku" | "bb_costnet" | "cost_price" | "is_antique" | "bb_is_bom"> & {
         bom_recipes?: BomRecipe[] | null;
     }) | null;
     app_purchase_orders_positions_special?: Pick<Tables<"app_purchase_orders_positions_special">, "unit_price_net" | "order_id">[] | null;
@@ -40,19 +40,19 @@ const calculatePurchasePrice = (item: OrderItems): number => {
         return 300;
     }
 
-    // 3. BOMs (Summe der Komponenten-EKPs)
+    // 3. BOMs (Summe der Komponenten-EKPs - nur Warenwert ohne Beschaffungskosten)
     if (product.bb_is_bom === true) {
         const recipes = product.bom_recipes ?? [];
         const bomCost = recipes.reduce((acc, recipe) => {
             const qty = Number(recipe.quantity ?? 0);
-            const price = Number(recipe.billbee_component?.bb_net_purchase_price ?? 0);
+            const price = Number(recipe.billbee_component?.cost_price ?? 0);
             return acc + (qty * price);
         }, 0);
         return bomCost;
     }
 
-    // 4. Normale Produkte
-    return Number(product.bb_net_purchase_price ?? 0);
+    // 4. Normale Produkte - Einkaufspreis ohne Beschaffungskosten
+    return Number(product.cost_price ?? 0);
 };
 
 export default function OrderItemsList({ items }: { items: OrderItems[] }) {

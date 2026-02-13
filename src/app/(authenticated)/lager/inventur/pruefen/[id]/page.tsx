@@ -27,7 +27,7 @@ export default function InventurPruefenPage() {
     sorters: { initial: [{ field: "created_at", order: "desc" }] },
     filters: { permanent: [{ field: "bb_is_active", operator: "eq", value: true },{ field: "is_antique", operator: "eq", value: false },{ field: "bb_is_bom", operator: "eq", value: false },{ field: "is_variant_set", operator: "eq", value: false }, { field: "product_type", operator: "ne", value: "Service" }], mode: "server" },
     meta: {
-      select: "id, bb_sku, supplier_sku, inventory_cagtegory, bb_is_active, is_antique, bb_is_bom, is_variant_set, product_type, bb_net_purchase_price, app_inventory_counts(*, app_stocks(*), app_stock_locations(*)), app_inventory_snapshots(*, app_stocks(*))",
+      select: "id, bb_sku, supplier_sku, inventory_cagtegory, bb_is_active, is_antique, bb_is_bom, is_variant_set, product_type, bb_costnet, app_inventory_counts(*, app_stocks(*), app_stock_locations(*)), app_inventory_snapshots(*, app_stocks(*))",
     },
   });
 
@@ -54,7 +54,7 @@ export default function InventurPruefenPage() {
       const qtyTotal = qtySellable + qtyUnsellable;
       const systemStock = product.app_inventory_snapshots?.reduce((acc: number, c: InventorySnapshot) => acc + ((c.bb_stock_current || 0) + (c.bb_unfullfilled_amount || 0)), 0) || 0;
       const difference = qtyTotal - systemStock;
-      const purchasePrice = Number(product.bb_net_purchase_price) || 0;
+      const purchasePrice = Number(product.bb_costnet) || 0;
       const differenceValue = difference * purchasePrice;
       
       return [
@@ -313,13 +313,13 @@ export default function InventurPruefenPage() {
         sorter: (a: Product, b: Product) => {
             const diffA = (a.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + ((c.qty_sellable || 0) + (c.qty_unsellable || 0)), 0) || 0) - (a.app_inventory_snapshots?.reduce((acc: number, c: InventorySnapshot) => acc + ((c.bb_stock_current || 0) + (c.bb_unfullfilled_amount || 0)), 0) || 0);
             const diffB = (b.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + ((c.qty_sellable || 0) + (c.qty_unsellable || 0)), 0) || 0) - (b.app_inventory_snapshots?.reduce((acc: number, c: InventorySnapshot) => acc + ((c.bb_stock_current || 0) + (c.bb_unfullfilled_amount || 0)), 0) || 0);
-            const valueA = diffA * (Number(a.bb_net_purchase_price) || 0);
-            const valueB = diffB * (Number(b.bb_net_purchase_price) || 0);
+            const valueA = diffA * (Number(a.bb_costnet) || 0);
+            const valueB = diffB * (Number(b.bb_costnet) || 0);
             return valueA - valueB;
         },
         render: (item: Product) => {
             const difference = (item.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + ((c.qty_sellable || 0) + (c.qty_unsellable || 0)), 0) || 0) - (item.app_inventory_snapshots?.reduce((acc: number, c: InventorySnapshot) => acc + ((c.bb_stock_current || 0) + (c.bb_unfullfilled_amount || 0)), 0) || 0);
-            const purchasePrice = Number(item.bb_net_purchase_price) || 0;
+            const purchasePrice = Number(item.bb_costnet) || 0;
             const differenceValue = difference * purchasePrice;
             
             return (
