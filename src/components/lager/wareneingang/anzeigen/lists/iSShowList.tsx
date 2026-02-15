@@ -119,14 +119,16 @@ export default function InboundShipmentsList({itemsNormal, itemsSpecial, title}:
                         <Col span={9} style={{ minWidth: 0 }}>
                             <Space direction="horizontal" size={8} style={{ width: "100%" }}>
                                 <Typography.Text strong style={{ display: "block" }} ellipsis>
-                                    <Link href={`../../artikel/anzeigen/${item.app_purchase_orders_positions_special?.base_model?.id}`}>{item.app_purchase_orders_positions_special?.base_model?.bb_sku ?? "bb_sku fehlt"}</Link>
+                                    <Link href={`../../artikel/anzeigen/${item.app_purchase_orders_positions_special?.base_model?.id ?? item.app_purchase_orders_positions_special?.billbee_product?.id}`}>
+                                        {item.app_purchase_orders_positions_special?.base_model?.bb_sku ?? item.app_purchase_orders_positions_special?.billbee_product?.bb_sku ?? "bb_sku fehlt"}
+                                    </Link>
                                 </Typography.Text>
                                 {!!!item.app_purchase_orders_positions_special ? <></> : (<Tag color={"orange-inverse"}>{"SB"}</Tag>)}
                                 {(item.app_purchase_orders_positions_special?.app_orders?.bb_OrderNumber && item.app_purchase_orders_positions_special?.app_orders?.app_customers?.bb_Name) && (<Link href={`../../kundenberatung/auftrag/${item.app_purchase_orders_positions_special?.app_orders?.id}`}><Tag>{item.app_purchase_orders_positions_special?.app_orders?.bb_OrderNumber ?? "Bestellnummer fehlt"} - {item.app_purchase_orders_positions_special?.app_orders?.app_customers?.bb_Name ?? "Kundenname fehlt"}</Tag></Link>)}
                             </Space>
                             <Space direction="vertical" size={2} style={{ width: "100%" }}>
                                 <Typography.Text type="secondary" style={{ display: "block" }} ellipsis>
-                                    {item.app_purchase_orders_positions_special?.base_model?.supplier_sku ?? (item?.app_purchase_orders_positions_special?.base_model?.supplier_sku ?? "supplier_sku fehlt")}
+                                    {item.app_purchase_orders_positions_special?.supplier_sku ?? "nicht vergeben"}
                                 </Typography.Text>
                                 {item.app_purchase_orders_positions_special?.internal_notes?.trim() ? (
                                     <Typography.Text type="secondary" style={{ display: "block" }} ellipsis>

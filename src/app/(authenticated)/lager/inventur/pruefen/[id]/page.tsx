@@ -1,11 +1,11 @@
 "use client";
 
-import { Collapse, Table, Radio, Space, Button, Typography } from "antd";
+import { Collapse, Table, Radio, Space, Button, Typography, Statistic, Row, Col, Card } from "antd";
 import { useTable } from "@refinedev/antd";
 import { Tables } from "@/types/supabase";
 import { render } from "react-dom";
-import { useState } from "react";
-import { DownloadOutlined } from "@ant-design/icons";
+import { useState, useMemo } from "react";
+import { DownloadOutlined, BarChartOutlined } from "@ant-design/icons";
 
 type Stock = Tables<"app_stocks">;
 type StockLocation = Tables<"app_stock_locations">;
@@ -18,8 +18,30 @@ type Product = Tables<"app_products"> & {
 type InventoryCount = Tables<"app_inventory_counts"> & { app_stocks: Stock | null; app_stock_locations: StockLocation | null };
 type InventorySnapshot = Tables<"app_inventory_snapshots"> & { app_stocks: Stock | null };
 
+interface CategoryData {
+  category: string;
+  products: Product[];
+  subcategories: Map<string, Product[]>;
+  totalCountedValue: number;
+  totalSystemValue: number;
+  totalCountedQty: number;
+  totalSystemQty: number;
+  totalDifference: number;
+  totalDifferenceValue: number;
+}
+
+interface ProductCalculations {
+  qtyCounted: number;
+  qtySystem: number;
+  valueCounted: number;
+  valueSystem: number;
+  difference: number;
+  differenceValue: number;
+}
+
 export default function InventurPruefenPage() {
-  const [showOnlyDifferences, setShowOnlyDifferences] = useState(false);
+  const [showFilter, setShowFilter] = useState<'all' | 'withValue' | 'withDifference'>('all');
+  const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   
   const { tableProps, sorters } = useTable<Product>({
     resource: "app_products",
@@ -27,13 +49,33 @@ export default function InventurPruefenPage() {
     sorters: { initial: [{ field: "created_at", order: "desc" }] },
     filters: { permanent: [{ field: "bb_is_active", operator: "eq", value: true },{ field: "is_antique", operator: "eq", value: false },{ field: "bb_is_bom", operator: "eq", value: false },{ field: "is_variant_set", operator: "eq", value: false }, { field: "product_type", operator: "ne", value: "Service" }], mode: "server" },
     meta: {
-      select: "id, bb_sku, supplier_sku, inventory_cagtegory, bb_is_active, is_antique, bb_is_bom, is_variant_set, product_type, bb_costnet, app_inventory_counts(*, app_stocks(*), app_stock_locations(*)), app_inventory_snapshots(*, app_stocks(*))",
+      select: "id, bb_sku, supplier_sku, inventory_cagtegory, bb_category1, bb_is_active, is_antique, bb_is_bom, is_variant_set, product_type, bb_costnet, app_inventory_counts(*, app_stocks(*), app_stock_locations(*)), app_inventory_snapshots(*, app_stocks(*))",
     },
   });
 
+  // Hilfsfunktion für Produktberechnungen
+  const calculateProductValues = (product: Product): ProductCalculations => {
+    const qtyCounted = product.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + ((c.qty_sellable || 0) + (c.qty_unsellable || 0)), 0) || 0;
+    const qtySystem = product.app_inventory_snapshots?.reduce((acc: number, c: InventorySnapshot) => acc + ((c.bb_stock_current || 0) + (c.bb_unfullfilled_amount || 0)), 0) || 0;
+    const costPrice = Number(product.bb_costnet) || 0;
+    const valueCounted = qtyCounted * costPrice;
+    const valueSystem = qtySystem * costPrice;
+    const difference = qtyCounted - qtySystem;
+    const differenceValue = difference * costPrice;
+
+    return {
+      qtyCounted,
+      qtySystem,
+      valueCounted,
+      valueSystem,
+      difference,
+      differenceValue
+    };
+  };
+
   // CSV-Export Funktion
   const handleExportCSV = () => {
-    const dataToExport = showOnlyDifferences ? filteredProducts : products;
+    const dataToExport = filteredProducts;
     
     // CSV Header
     const headers = [
@@ -44,28 +86,30 @@ export default function InventurPruefenPage() {
       "Zählbestand (gesamt)",
       "Systembestand",
       "Differenz",
-      "Differenz (Wert)"
+      "Differenz (Wert)",
+      "Zählwert",
+      "Systemwert",
+      "Wertdifferenz"
     ];
     
     // CSV Rows
     const rows = dataToExport.map(product => {
+      const calculations = calculateProductValues(product);
       const qtySellable = product.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + (c.qty_sellable || 0), 0) || 0;
       const qtyUnsellable = product.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + (c.qty_unsellable || 0), 0) || 0;
-      const qtyTotal = qtySellable + qtyUnsellable;
-      const systemStock = product.app_inventory_snapshots?.reduce((acc: number, c: InventorySnapshot) => acc + ((c.bb_stock_current || 0) + (c.bb_unfullfilled_amount || 0)), 0) || 0;
-      const difference = qtyTotal - systemStock;
-      const purchasePrice = Number(product.bb_costnet) || 0;
-      const differenceValue = difference * purchasePrice;
       
       return [
         product.bb_sku || "",
         product.inventory_cagtegory || "",
         qtySellable,
         qtyUnsellable,
-        qtyTotal,
-        systemStock,
-        difference,
-        differenceValue.toFixed(2)
+        calculations.qtyCounted,
+        calculations.qtySystem,
+        calculations.difference,
+        calculations.differenceValue.toFixed(2),
+        calculations.valueCounted.toFixed(2),
+        calculations.valueSystem.toFixed(2),
+        (calculations.valueCounted - calculations.valueSystem).toFixed(2)
       ];
     });
     
@@ -95,15 +139,111 @@ export default function InventurPruefenPage() {
 
 
   const products = tableProps.dataSource || [];
-  
+
+  // Gruppiere Produkte nach Kategorien und berechne Werte
+  const categoryData = useMemo(() => {
+    const categoriesMap = new Map<string, CategoryData>();
+
+    products.forEach(product => {
+      const calculations = calculateProductValues(product);
+      const category = product.inventory_cagtegory || 'Ohne Kategorie';
+      const subcategory = product.bb_category1 || 'Ohne Subkategorie';
+
+      if (!categoriesMap.has(category)) {
+        categoriesMap.set(category, {
+          category,
+          products: [],
+          subcategories: new Map(),
+          totalCountedValue: 0,
+          totalSystemValue: 0,
+          totalCountedQty: 0,
+          totalSystemQty: 0,
+          totalDifference: 0,
+          totalDifferenceValue: 0
+        });
+      }
+
+      const catData = categoriesMap.get(category)!;
+      catData.products.push(product);
+      catData.totalCountedValue += calculations.valueCounted;
+      catData.totalSystemValue += calculations.valueSystem;
+      catData.totalCountedQty += calculations.qtyCounted;
+      catData.totalSystemQty += calculations.qtySystem;
+      catData.totalDifference += calculations.difference;
+      catData.totalDifferenceValue += calculations.differenceValue;
+
+      if (!catData.subcategories.has(subcategory)) {
+        catData.subcategories.set(subcategory, []);
+      }
+      catData.subcategories.get(subcategory)!.push(product);
+    });
+
+    return categoriesMap;
+  }, [products]);
+
   // Filter anwenden
-  const filteredProducts = showOnlyDifferences 
-    ? products.filter(product => {
-        const qtyCounted = (product.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + ((c.qty_sellable || 0) + (c.qty_unsellable || 0)), 0) || 0);
-        const systemStock = (product.app_inventory_snapshots?.reduce((acc: number, c: InventorySnapshot) => acc + ((c.bb_stock_current || 0) + (c.bb_unfullfilled_amount || 0)), 0) || 0);
-        return qtyCounted !== systemStock;
-      })
-    : products;
+  const filteredCategoryData = useMemo(() => {
+    if (showFilter === 'all') return categoryData;
+
+    const filtered = new Map<string, CategoryData>();
+    
+    categoryData.forEach((catData, categoryName) => {
+      let filteredProducts: Product[];
+      
+      if (showFilter === 'withDifference') {
+        filteredProducts = catData.products.filter(product => {
+          const calculations = calculateProductValues(product);
+          return calculations.difference !== 0;
+        });
+      } else if (showFilter === 'withValue') {
+        filteredProducts = catData.products.filter(product => {
+          const calculations = calculateProductValues(product);
+          return !(calculations.qtyCounted === 0 && calculations.qtySystem === 0);
+        });
+      } else {
+        filteredProducts = catData.products;
+      }
+
+      if (filteredProducts.length > 0) {
+        const filteredSubcategories = new Map<string, Product[]>();
+        filteredProducts.forEach(product => {
+          const subcategory = product.bb_category1 || 'Ohne Subkategorie';
+          if (!filteredSubcategories.has(subcategory)) {
+            filteredSubcategories.set(subcategory, []);
+          }
+          filteredSubcategories.get(subcategory)!.push(product);
+        });
+
+        // Recalculate totals for filtered data
+        let totalCountedValue = 0, totalSystemValue = 0, totalCountedQty = 0, totalSystemQty = 0, totalDifference = 0, totalDifferenceValue = 0;
+        filteredProducts.forEach(product => {
+          const calc = calculateProductValues(product);
+          totalCountedValue += calc.valueCounted;
+          totalSystemValue += calc.valueSystem;
+          totalCountedQty += calc.qtyCounted;
+          totalSystemQty += calc.qtySystem;
+          totalDifference += calc.difference;
+          totalDifferenceValue += calc.differenceValue;
+        });
+
+        filtered.set(categoryName, {
+          ...catData,
+          products: filteredProducts,
+          subcategories: filteredSubcategories,
+          totalCountedValue,
+          totalSystemValue,
+          totalCountedQty,
+          totalSystemQty,
+          totalDifference,
+          totalDifferenceValue
+        });
+      }
+    });
+
+    return filtered;
+  }, [categoryData, showFilter]);
+
+  const filteredProducts = Array.from(filteredCategoryData.values()).flatMap(cat => cat.products);
 
   console.log(products);
 
@@ -278,56 +418,73 @@ export default function InventurPruefenPage() {
         title: "Zählbestand (gesamt)", 
         key: "qty_total",  
         render: (item: Product) => {
-            const qty_sellable = item.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + (c.qty_sellable || 0), 0) || 0;
-            const qty_unsellable = item.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + (c.qty_unsellable || 0), 0) || 0;
-            return qty_sellable + qty_unsellable;
+            const calculations = calculateProductValues(item);
+            return calculations.qtyCounted;
         }
     },
     { 
         title: "Systembestand", 
         key: "system_stock",
         render: (item: Product) => {
-            const system_stock = item.app_inventory_snapshots?.reduce((acc: number, c: InventorySnapshot) => acc + ((c.bb_stock_current || 0) + (c.bb_unfullfilled_amount || 0)), 0);
-            return(system_stock);
+            const calculations = calculateProductValues(item);
+            return calculations.qtySystem;
         }
     },
     { title: "Differenz", key: "difference",
         sorter: (a: Product, b: Product) => {
-            const diffA = (a.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + ((c.qty_sellable || 0) + (c.qty_unsellable || 0)), 0) || 0) - (a.app_inventory_snapshots?.reduce((acc: number, c: InventorySnapshot) => acc + ((c.bb_stock_current || 0) + (c.bb_unfullfilled_amount || 0)), 0) || 0);
-            const diffB = (b.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + ((c.qty_sellable || 0) + (c.qty_unsellable || 0)), 0) || 0) - (b.app_inventory_snapshots?.reduce((acc: number, c: InventorySnapshot) => acc + ((c.bb_stock_current || 0) + (c.bb_unfullfilled_amount || 0)), 0) || 0);
-            return diffA - diffB;
+            const calcA = calculateProductValues(a);
+            const calcB = calculateProductValues(b);
+            return calcA.difference - calcB.difference;
         },
         render: (item: Product) => {
-            const difference = (item.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + ((c.qty_sellable || 0) + (c.qty_unsellable || 0)), 0) || 0) - (item.app_inventory_snapshots?.reduce((acc: number, c: InventorySnapshot) => acc + ((c.bb_stock_current || 0) + (c.bb_unfullfilled_amount || 0)), 0) || 0);
+            const calculations = calculateProductValues(item);
             return (
                 <span style={{ 
-                    fontWeight: difference !== 0 ? 'bold' : 'normal',
-                    color: difference !== 0 ? '#ff4d4f' : 'inherit'
+                    fontWeight: calculations.difference !== 0 ? 'bold' : 'normal',
+                    color: calculations.difference !== 0 ? '#ff4d4f' : 'inherit'
                 }}>
-                    {difference}
+                    {calculations.difference}
                 </span>
             );
         }
      },
-    { title: "Differenz (Wert)", key: "difference_value",
+    { title: "Zählwert", key: "counted_value",
         sorter: (a: Product, b: Product) => {
-            const diffA = (a.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + ((c.qty_sellable || 0) + (c.qty_unsellable || 0)), 0) || 0) - (a.app_inventory_snapshots?.reduce((acc: number, c: InventorySnapshot) => acc + ((c.bb_stock_current || 0) + (c.bb_unfullfilled_amount || 0)), 0) || 0);
-            const diffB = (b.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + ((c.qty_sellable || 0) + (c.qty_unsellable || 0)), 0) || 0) - (b.app_inventory_snapshots?.reduce((acc: number, c: InventorySnapshot) => acc + ((c.bb_stock_current || 0) + (c.bb_unfullfilled_amount || 0)), 0) || 0);
-            const valueA = diffA * (Number(a.bb_costnet) || 0);
-            const valueB = diffB * (Number(b.bb_costnet) || 0);
-            return valueA - valueB;
+            const calcA = calculateProductValues(a);
+            const calcB = calculateProductValues(b);
+            return calcA.valueCounted - calcB.valueCounted;
         },
         render: (item: Product) => {
-            const difference = (item.app_inventory_counts?.reduce((acc: number, c: InventoryCount) => acc + ((c.qty_sellable || 0) + (c.qty_unsellable || 0)), 0) || 0) - (item.app_inventory_snapshots?.reduce((acc: number, c: InventorySnapshot) => acc + ((c.bb_stock_current || 0) + (c.bb_unfullfilled_amount || 0)), 0) || 0);
-            const purchasePrice = Number(item.bb_costnet) || 0;
-            const differenceValue = difference * purchasePrice;
+            const calculations = calculateProductValues(item);
+            return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(calculations.valueCounted);
+        }
+     },
+    { title: "Systemwert", key: "system_value",
+        sorter: (a: Product, b: Product) => {
+            const calcA = calculateProductValues(a);
+            const calcB = calculateProductValues(b);
+            return calcA.valueSystem - calcB.valueSystem;
+        },
+        render: (item: Product) => {
+            const calculations = calculateProductValues(item);
+            return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(calculations.valueSystem);
+        }
+     },
+    { title: "Wertdifferenz", key: "difference_value",
+        sorter: (a: Product, b: Product) => {
+            const calcA = calculateProductValues(a);
+            const calcB = calculateProductValues(b);
+            return calcA.differenceValue - calcB.differenceValue;
+        },
+        render: (item: Product) => {
+            const calculations = calculateProductValues(item);
             
             return (
                 <span style={{ 
-                    fontWeight: differenceValue !== 0 ? 'bold' : 'normal',
-                    color: differenceValue !== 0 ? '#ff4d4f' : 'inherit'
+                    fontWeight: calculations.differenceValue !== 0 ? 'bold' : 'normal',
+                    color: calculations.differenceValue !== 0 ? '#ff4d4f' : 'inherit'
                 }}>
-                    {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(differenceValue)}
+                    {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(calculations.differenceValue)}
                 </span>
             );
         }
@@ -335,32 +492,171 @@ export default function InventurPruefenPage() {
   ]
 
 
+  // Gesamtstatistiken berechnen
+  const totalStats = useMemo(() => {
+    let totalCountedValue = 0, totalSystemValue = 0, totalCountedQty = 0, totalSystemQty = 0, totalDifferenceValue = 0;
+    
+    Array.from(filteredCategoryData.values()).forEach(catData => {
+      totalCountedValue += catData.totalCountedValue;
+      totalSystemValue += catData.totalSystemValue;
+      totalCountedQty += catData.totalCountedQty;
+      totalSystemQty += catData.totalSystemQty;
+      totalDifferenceValue += catData.totalDifferenceValue;
+    });
+    
+    return {
+      totalCountedValue,
+      totalSystemValue,
+      totalCountedQty,
+      totalSystemQty,
+      totalDifferenceValue
+    };
+  }, [filteredCategoryData]);
   
   return (
       <>
-        <Space style={{ marginBottom: 16 }}>
-          <span>Anzeige:</span>
-          <Radio.Group 
-            value={showOnlyDifferences} 
-            onChange={(e) => setShowOnlyDifferences(e.target.value)}
-          >
-            <Radio.Button value={false}>Alle Produkte</Radio.Button>
-            <Radio.Button value={true}>Nur mit Differenz</Radio.Button>
-          </Radio.Group>
-          <Button 
-            type="primary" 
-            icon={<DownloadOutlined />}
-            onClick={handleExportCSV}
-          >
-            CSV Export
-          </Button>
+        <Space direction="vertical" style={{ width: '100%', marginBottom: 16 }}>
+          <Card>
+            <Row gutter={16}>
+              <Col span={6}>
+                <Statistic
+                  title="Zählwert (gesamt)"
+                  value={totalStats.totalCountedValue}
+                  precision={2}
+                  suffix="€"
+                  prefix={<BarChartOutlined />}
+                />
+              </Col>
+              <Col span={6}>
+                <Statistic
+                  title="Systemwert (gesamt)"
+                  value={totalStats.totalSystemValue}
+                  precision={2}
+                  suffix="€"
+                />
+              </Col>
+              <Col span={6}>
+                <Statistic
+                  title="Wertdifferenz"
+                  value={totalStats.totalDifferenceValue}
+                  precision={2}
+                  suffix="€"
+                  valueStyle={{ color: totalStats.totalDifferenceValue !== 0 ? '#ff4d4f' : '#3f8600' }}
+                />
+              </Col>
+              <Col span={6}>
+                <Statistic
+                  title="Kategorien"
+                  value={filteredCategoryData.size}
+                />
+              </Col>
+            </Row>
+          </Card>
+          
+          <Space style={{ marginBottom: 16 }}>
+            <span>Anzeige:</span>
+            <Radio.Group 
+              value={showFilter} 
+              onChange={(e) => setShowFilter(e.target.value)}
+            >
+              <Radio.Button value="all">Alle Produkte</Radio.Button>
+              <Radio.Button value="withValue">Mit Inventarwert</Radio.Button>
+              <Radio.Button value="withDifference">Nur mit Differenz</Radio.Button>
+            </Radio.Group>
+            <Button 
+              type="primary" 
+              icon={<DownloadOutlined />}
+              onClick={handleExportCSV}
+            >
+              CSV Export
+            </Button>
+          </Space>
         </Space>
-        <Table 
-          {...tableProps}
-          dataSource={filteredProducts}
-          columns={columns}
-          expandable={expandable}
-          rowKey="id"
+
+        <Collapse
+          size="small"
+          onChange={(keys) => setExpandedCategories(keys as string[])}
+          items={Array.from(filteredCategoryData.entries())
+            .sort(([,a], [,b]) => Math.abs(b.totalDifferenceValue) - Math.abs(a.totalDifferenceValue))
+            .map(([categoryName, catData]) => ({
+              key: categoryName,
+              label: (
+                <Row style={{ width: '100%' }} align="middle">
+                  <Col flex="auto">
+                    <Typography.Text strong>{categoryName}</Typography.Text>
+                  </Col>
+                  <Col>
+                    <Space size="large">
+                      <Typography.Text>Produkte: {catData.products.length}</Typography.Text>
+                      <Typography.Text>Zählwert: {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(catData.totalCountedValue)}</Typography.Text>
+                      <Typography.Text>Systemwert: {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(catData.totalSystemValue)}</Typography.Text>
+                      <Typography.Text 
+                        style={{ 
+                          fontWeight: catData.totalDifferenceValue !== 0 ? 'bold' : 'normal',
+                          color: catData.totalDifferenceValue !== 0 ? '#ff4d4f' : 'inherit'
+                        }}
+                      >
+                        Differenz: {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(catData.totalDifferenceValue)}
+                      </Typography.Text>
+                    </Space>
+                  </Col>
+                </Row>
+              ),
+              children: (
+                <Collapse
+                  size="small"
+                  ghost
+                  items={Array.from(catData.subcategories.entries())
+                    .sort(([,a], [,b]) => {
+                      const valueA = a.reduce((sum, p) => sum + calculateProductValues(p).differenceValue, 0);
+                      const valueB = b.reduce((sum, p) => sum + calculateProductValues(p).differenceValue, 0);
+                      return Math.abs(valueB) - Math.abs(valueA);
+                    })
+                    .map(([subcategoryName, subcatProducts]) => {
+                      const subcatTotalCountedValue = subcatProducts.reduce((sum, p) => sum + calculateProductValues(p).valueCounted, 0);
+                      const subcatTotalSystemValue = subcatProducts.reduce((sum, p) => sum + calculateProductValues(p).valueSystem, 0);
+                      const subcatTotalDifferenceValue = subcatProducts.reduce((sum, p) => sum + calculateProductValues(p).differenceValue, 0);
+                      
+                      return {
+                        key: `${categoryName}-${subcategoryName}`,
+                        label: (
+                          <Row style={{ width: '100%' }} align="middle">
+                            <Col flex="auto">
+                              <Typography.Text>{subcategoryName}</Typography.Text>
+                            </Col>
+                            <Col>
+                              <Space size="large">
+                                <Typography.Text>Produkte: {subcatProducts.length}</Typography.Text>
+                                <Typography.Text>Zählwert: {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(subcatTotalCountedValue)}</Typography.Text>
+                                <Typography.Text>Systemwert: {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(subcatTotalSystemValue)}</Typography.Text>
+                                <Typography.Text 
+                                  style={{ 
+                                    fontWeight: subcatTotalDifferenceValue !== 0 ? 'bold' : 'normal',
+                                    color: subcatTotalDifferenceValue !== 0 ? '#ff4d4f' : 'inherit'
+                                  }}
+                                >
+                                  Differenz: {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(subcatTotalDifferenceValue)}
+                                </Typography.Text>
+                              </Space>
+                            </Col>
+                          </Row>
+                        ),
+                        children: (
+                          <Table 
+                            dataSource={subcatProducts}
+                            columns={columns}
+                            expandable={expandable}
+                            rowKey="id"
+                            pagination={false}
+                            size="small"
+                          />
+                        )
+                      };
+                    })
+                  }
+                />
+              )
+            }))}
         />
       </>
     );

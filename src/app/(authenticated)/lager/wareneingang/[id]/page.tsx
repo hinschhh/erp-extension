@@ -69,45 +69,47 @@ export default function ViewPurchaseOrderPage() {
         .map(id => purchaseOrders.find(po => po?.id === id))
         .filter((po): po is NonNullable<typeof po> => po !== null && po !== undefined);
     
-    const itemsPONormal = itemsNormal.map(item => item.app_purchase_orders_positions_normal).flat().filter(item => item !== null && item !== undefined);
-    const itemsPOSpecial = itemsSpecial.map(item => item.app_purchase_orders_positions_special).flat().filter(item => item !== null && item !== undefined);
+    // FIXED: Use quantity_delivered from inbound shipment items instead of qty_ordered from PO items
+    const sumFurniture = itemsNormal.filter(item => item.app_purchase_orders_positions_normal?.app_products?.inventory_cagtegory === "Möbel").reduce((acc, item) => {
+      const qty = typeof item.quantity_delivered === "string" ? Number(item.quantity_delivered) : item.quantity_delivered ?? 0;
+      const unit = typeof item.app_purchase_orders_positions_normal?.unit_price_net === "string" ? Number(item.app_purchase_orders_positions_normal?.unit_price_net) : item.app_purchase_orders_positions_normal?.unit_price_net ?? 0;
+      return acc + qty * unit;
+    }, 0) + itemsSpecial.filter(item => item.app_purchase_orders_positions_special?.billbee_product?.inventory_cagtegory === "Möbel").reduce((acc, item) => {
+      const qty = typeof item.quantity_delivered === "string" ? Number(item.quantity_delivered) : item.quantity_delivered ?? 0;
+      const unit = typeof item.app_purchase_orders_positions_special?.unit_price_net === "string" ? Number(item.app_purchase_orders_positions_special?.unit_price_net) : item.app_purchase_orders_positions_special?.unit_price_net ?? 0;
+      return acc + qty * unit;
+    }, 0);
 
-    const sumFurniture = (itemsPONormal ?? []).filter(item => item.app_products?.inventory_cagtegory === "Möbel").reduce((acc, item) => {
-      const qty = typeof item.qty_ordered === "string" ? Number(item.qty_ordered) : item.qty_ordered;
-      const unit = typeof item.unit_price_net === "string" ? Number(item.unit_price_net) : item.unit_price_net;
+    const sumTradeGoods = itemsNormal.filter(item => item.app_purchase_orders_positions_normal?.app_products?.inventory_cagtegory === "Handelswaren").reduce((acc, item) => {
+      const qty = typeof item.quantity_delivered === "string" ? Number(item.quantity_delivered) : item.quantity_delivered ?? 0;
+      const unit = typeof item.app_purchase_orders_positions_normal?.unit_price_net === "string" ? Number(item.app_purchase_orders_positions_normal?.unit_price_net) : item.app_purchase_orders_positions_normal?.unit_price_net ?? 0;
       return acc + qty * unit;
-    }, 0) + (itemsPOSpecial ?? []).filter(item => item.billbee_product?.inventory_cagtegory === "Möbel").reduce((acc, item) => {
-      const qty = typeof item.qty_ordered === "string" ? Number(item.qty_ordered) : item.qty_ordered;
-      const unit = typeof item.unit_price_net === "string" ? Number(item.unit_price_net) : item.unit_price_net;
-      return acc + qty * unit;
-    }, 0);
-    const sumTradeGoods = (itemsPONormal ?? []).filter(item => item.app_products?.inventory_cagtegory === "Handelswaren").reduce((acc, item) => {
-      const qty = typeof item.qty_ordered === "string" ? Number(item.qty_ordered) : item.qty_ordered;
-      const unit = typeof item.unit_price_net === "string" ? Number(item.unit_price_net) : item.unit_price_net;
-      return acc + qty * unit;
-    }, 0) + (itemsPOSpecial ?? []).filter(item => item.billbee_product?.inventory_cagtegory === "Handelswaren").reduce((acc, item) => {
-      const qty = typeof item.qty_ordered === "string" ? Number(item.qty_ordered) : item.qty_ordered;
-      const unit = typeof item.unit_price_net === "string" ? Number(item.unit_price_net) : item.unit_price_net;
+    }, 0) + itemsSpecial.filter(item => item.app_purchase_orders_positions_special?.billbee_product?.inventory_cagtegory === "Handelswaren").reduce((acc, item) => {
+      const qty = typeof item.quantity_delivered === "string" ? Number(item.quantity_delivered) : item.quantity_delivered ?? 0;
+      const unit = typeof item.app_purchase_orders_positions_special?.unit_price_net === "string" ? Number(item.app_purchase_orders_positions_special?.unit_price_net) : item.app_purchase_orders_positions_special?.unit_price_net ?? 0;
       return acc + qty * unit;
     }, 0);
-    const sumParts = (itemsPONormal ?? []).filter(item => item.app_products?.inventory_cagtegory === "Bauteile").reduce((acc, item) => {
-      const qty = typeof item.qty_ordered === "string" ? Number(item.qty_ordered) : item.qty_ordered;
-      const unit = typeof item.unit_price_net === "string" ? Number(item.unit_price_net) : item.unit_price_net;
+
+    const sumParts = itemsNormal.filter(item => item.app_purchase_orders_positions_normal?.app_products?.inventory_cagtegory === "Bauteile").reduce((acc, item) => {
+      const qty = typeof item.quantity_delivered === "string" ? Number(item.quantity_delivered) : item.quantity_delivered ?? 0;
+      const unit = typeof item.app_purchase_orders_positions_normal?.unit_price_net === "string" ? Number(item.app_purchase_orders_positions_normal?.unit_price_net) : item.app_purchase_orders_positions_normal?.unit_price_net ?? 0;
       return acc + qty * unit;
-    }, 0) + (itemsPOSpecial ?? []).filter(item => item.billbee_product?.inventory_cagtegory === "Bauteile").reduce((acc, item) => {
-      const qty = typeof item.qty_ordered === "string" ? Number(item.qty_ordered) : item.qty_ordered;
-      const unit = typeof item.unit_price_net === "string" ? Number(item.unit_price_net) : item.unit_price_net;
-      return acc + qty * unit;
-    }, 0);
-    const sumStones = (itemsPONormal ?? []).filter(item => item.app_products?.inventory_cagtegory === "Naturstein").reduce((acc, item) => {
-      const qty = typeof item.qty_ordered === "string" ? Number(item.qty_ordered) : item.qty_ordered;
-      const unit = typeof item.unit_price_net === "string" ? Number(item.unit_price_net) : item.unit_price_net;
-      return acc + qty * unit;
-    }, 0) + (itemsPOSpecial ?? []).filter(item => item.billbee_product?.inventory_cagtegory === "Naturstein").reduce((acc, item) => {
-      const qty = typeof item.qty_ordered === "string" ? Number(item.qty_ordered) : item.qty_ordered;
-      const unit = typeof item.unit_price_net === "string" ? Number(item.unit_price_net) : item.unit_price_net;
+    }, 0) + itemsSpecial.filter(item => item.app_purchase_orders_positions_special?.billbee_product?.inventory_cagtegory === "Bauteile").reduce((acc, item) => {
+      const qty = typeof item.quantity_delivered === "string" ? Number(item.quantity_delivered) : item.quantity_delivered ?? 0;
+      const unit = typeof item.app_purchase_orders_positions_special?.unit_price_net === "string" ? Number(item.app_purchase_orders_positions_special?.unit_price_net) : item.app_purchase_orders_positions_special?.unit_price_net ?? 0;
       return acc + qty * unit;
     }, 0);
+
+    const sumStones = itemsNormal.filter(item => item.app_purchase_orders_positions_normal?.app_products?.inventory_cagtegory === "Naturstein").reduce((acc, item) => {
+      const qty = typeof item.quantity_delivered === "string" ? Number(item.quantity_delivered) : item.quantity_delivered ?? 0;
+      const unit = typeof item.app_purchase_orders_positions_normal?.unit_price_net === "string" ? Number(item.app_purchase_orders_positions_normal?.unit_price_net) : item.app_purchase_orders_positions_normal?.unit_price_net ?? 0;
+      return acc + qty * unit;
+    }, 0) + itemsSpecial.filter(item => item.app_purchase_orders_positions_special?.billbee_product?.inventory_cagtegory === "Naturstein").reduce((acc, item) => {
+      const qty = typeof item.quantity_delivered === "string" ? Number(item.quantity_delivered) : item.quantity_delivered ?? 0;
+      const unit = typeof item.app_purchase_orders_positions_special?.unit_price_net === "string" ? Number(item.app_purchase_orders_positions_special?.unit_price_net) : item.app_purchase_orders_positions_special?.unit_price_net ?? 0;
+      return acc + qty * unit;
+    }, 0);
+
     const sumInventoryCategories = [sumFurniture, sumTradeGoods, sumParts, sumStones]; 
 
 
