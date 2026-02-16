@@ -159,10 +159,33 @@ const resources: IResourceItem[] = [
     parentName: "accounting",
   },
   {
-    name: "Dashboard",
+    name: "dashboard",
     list: "/dashboard",
     options: { label: "Dashboard" },
     icon: <LineChartOutlined />,
+  },
+
+  {
+    name: "Cockpit",
+    list: "/dashboard",
+    parentName: "dashboard",
+    options: { label: "Cockpit" },
+  },
+
+  // Sonderbestellungen Dashboard
+  {
+    name: "sonderbestellungen",
+    list: "/dashboard/sonderbestellungen",
+    parentName: "dashboard",
+    options: { label: "Sonderbestellungen" },
+  },
+
+  // ABC-Analyse Dashboard
+  {
+    name: "abc_analyse",
+    list: "/dashboard/abc-analyse",
+    parentName: "dashboard", 
+    options: { label: "ABC-Analyse" },
   }
 
 
