@@ -191,8 +191,8 @@ const expandOrderItems = (items: OrderItem[]): ExpandedOrderItem[] => {
         const itemQty = Number(item.bb_Quantity ?? 0);
         const componentCost = componentQty * componentPrice * itemQty;
 
-        // Only include if component has a category and cost > 0
-        if (componentCategory && componentCost > 0) {
+        // Include components with category and non-zero cost (including cancellations)
+        if (componentCategory && componentCost !== 0) {
           expanded.push({
             ...item,
             component_category: componentCategory,

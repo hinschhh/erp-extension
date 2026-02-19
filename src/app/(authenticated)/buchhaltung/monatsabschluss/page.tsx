@@ -282,8 +282,8 @@ const expandOrderItems = (items: OrderItem[]): ExpandedOrderItem[] => {
         const itemQty = Number(item.bb_Quantity ?? 0);
         const componentCost = componentQty * componentPrice * itemQty;
 
-        // Only include if component has a category and cost > 0
-        if (componentCategory && componentCost > 0) {
+        // Include if component has a category and cost is not zero (includes negative costs for returns/cancellations)
+        if (componentCategory && componentCost !== 0) {
           expanded.push({
             ...item,
             component_category: componentCategory,
@@ -865,6 +865,9 @@ export default function MonatsabschlussPage() {
       const shippedAt = order?.bb_InvoiceDate ? dayjs(order.bb_InvoiceDate).format("DD.MM.YYYY") : "--";
       const orderNumber = order?.bb_OrderNumber ?? orderId.toString();
       const customerName = order?.app_customers?.bb_Name ?? "Unbekannter Kunde";
+      // Only mark as return/cancellation if non-BOM items have negative quantities
+      // BOM components with negative qty are legitimate (e.g., product swaps in BOMs)
+      const isReturn = items.some(item => !item.is_bom_component && getOrderItemQuantity(item) < 0);
 
       return {
         key: orderId.toString(),
@@ -875,7 +878,10 @@ export default function MonatsabschlussPage() {
               {shippedAt} –{" "}
               <Link href={`/kundenberatung/auftrag/${orderId}`}>Auftrag {orderNumber}</Link>
             </span>
-            <Typography.Text type="secondary">{formatCurrencyEUR(orderTotal)}</Typography.Text>
+            <Typography.Text type="secondary" style={{ color: isReturn ? '#cf1322' : undefined }}>
+              {formatCurrencyEUR(orderTotal)}
+              {isReturn && " (Storno/Retoure)"}
+            </Typography.Text>
           </Space>
         ),
         children: (
@@ -891,16 +897,25 @@ export default function MonatsabschlussPage() {
               const displaySku = item.is_bom_component && item.bom_sku
                 ? `${sku} (aus ${item.bom_sku})` 
                 : sku;
+              // Only mark as negative/cancellation if it's NOT a BOM component
+              // BOM components with negative qty are legitimate (e.g., product swaps)
+              const isNegative = qty < 0 && !item.is_bom_component;
 
               return (
                 <List.Item>
                   <Space style={{ width: "100%", justifyContent: "space-between" }}>
                     <Space>
-                      <Typography.Text strong>{displaySku}</Typography.Text>
-                      <Typography.Text>{qty} Stück</Typography.Text>
+                      <Typography.Text strong style={{ color: isNegative ? '#cf1322' : undefined }}>
+                        {displaySku}
+                      </Typography.Text>
+                      <Typography.Text style={{ color: isNegative ? '#cf1322' : undefined }}>
+                        {qty} Stück
+                      </Typography.Text>
                       <Typography.Text>{formatCurrencyEUR(unitCost)} / Stück</Typography.Text>
                     </Space>
-                    <Typography.Text strong>{formatCurrencyEUR(cost)}</Typography.Text>
+                    <Typography.Text strong style={{ color: isNegative ? '#cf1322' : undefined }}>
+                      {formatCurrencyEUR(cost)}
+                    </Typography.Text>
                   </Space>
                 </List.Item>
               );
